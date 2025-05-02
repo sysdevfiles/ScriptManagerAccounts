@@ -229,50 +229,50 @@ async def register_user_start(update: Update, context: ContextTypes.DEFAULT_TYPE
     query = update.callback_query
     chat_id = query.message.chat.id
     user_data[chat_id] = {} # Initialize data for this chat
-    await query.edit_message_text("Ok, vamos a registrar un nuevo usuario.") # Edit the menu message
-    await context.bot.send_message(chat_id=chat_id, text="1/8: ¿Plataforma de streaming?")
+    await query.edit_message_text("📝 Iniciando proceso de registro de nuevo usuario...") # Edit the menu message
+    await context.bot.send_message(chat_id=chat_id, text="1/8: 📺 Por favor, indica la plataforma de streaming:")
     return PLATFORM
 
 async def ask_platform(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Stores the platform and asks for the name."""
     chat_id = update.message.chat.id
     user_data[chat_id]['platform'] = update.message.text
-    await update.message.reply_text("2/8: ¿Nombre completo del usuario?")
+    await update.message.reply_text("2/8: 👤 Ingresa el nombre completo del usuario:")
     return NAME
 
 async def ask_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Stores the name and asks for the phone number."""
     chat_id = update.message.chat.id
     user_data[chat_id]['name'] = update.message.text
-    await update.message.reply_text("3/8: ¿Número de celular?")
+    await update.message.reply_text("3/8: 📱 ¿Cuál es el número de celular del usuario?")
     return PHONE
 
 async def ask_phone(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Stores the phone number and asks for payment type."""
     chat_id = update.message.chat.id
     user_data[chat_id]['phone'] = update.message.text
-    await update.message.reply_text("4/8: ¿Tipo de pago realizado?")
+    await update.message.reply_text("4/8: 💳 Indica el tipo de pago realizado:")
     return PAYMENT_TYPE
 
 async def ask_payment_type(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Stores the payment type and asks for email."""
     chat_id = update.message.chat.id
     user_data[chat_id]['payment_type'] = update.message.text
-    await update.message.reply_text("5/8: ¿Email del usuario?")
+    await update.message.reply_text("5/8: 📧 Ingresa la dirección de correo electrónico del usuario:")
     return EMAIL
 
 async def ask_email(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Stores the email and asks for PIN."""
     chat_id = update.message.chat.id
     user_data[chat_id]['email'] = update.message.text
-    await update.message.reply_text("6/8: ¿PIN de la cuenta (si aplica, si no, escribe 'N/A')?")
+    await update.message.reply_text("6/8: 🔢 ¿Cuál es el PIN de la cuenta? (Escribe 'N/A' si no aplica)")
     return PIN
 
 async def ask_pin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Stores the PIN and asks for the start date."""
     chat_id = update.message.chat.id
     user_data[chat_id]['pin'] = update.message.text
-    await update.message.reply_text("7/8: ¿Fecha de alta (YYYY-MM-DD)?")
+    await update.message.reply_text("7/8: 📅 Ingresa la fecha de alta del servicio (Formato: YYYY-MM-DD):")
     return START_DATE
 
 async def ask_start_date(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -280,7 +280,7 @@ async def ask_start_date(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     chat_id = update.message.chat.id
     # Basic date validation could be added here
     user_data[chat_id]['start_date'] = update.message.text
-    await update.message.reply_text("8/8: ¿Fecha de vencimiento (YYYY-MM-DD)?")
+    await update.message.reply_text("8/8: ⏳ Ingresa la fecha de vencimiento del servicio (Formato: YYYY-MM-DD):")
     return END_DATE
 
 async def ask_end_date(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -303,21 +303,22 @@ async def ask_end_date(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     registrations['registrations'].append(new_registration)
 
     if save_data(REG_DATA_FILE, registrations):
+        # More professional confirmation
+        name_escaped = escape_markdown(new_registration['name'], version=2)
+        platform_escaped = escape_markdown(new_registration['platform'], version=2)
         await update.message.reply_text(
-            f"✅ ¡Registro completado!\n"
-            f"Usuario: *{new_registration['name']}*\n"
-            f"Plataforma: *{new_registration['platform']}*\n"
-            f"Guardado exitosamente\\.",
+            f"✅ *Registro Guardado*\n\n"
+            f"Se ha registrado exitosamente al usuario *{name_escaped}* para la plataforma *{platform_escaped}*\\.",
             parse_mode='MarkdownV2'
         )
         # Send welcome message
         await update.message.reply_text(
-             f"🎉 ¡Bienvenido/a, *{new_registration['name']}*\\! Tu registro para *{new_registration['platform']}* ha sido completado\\.",
+             f"🎉 ¡Bienvenido/a, *{name_escaped}*\\! Tu registro para *{platform_escaped}* ha sido completado\\.",
              parse_mode='MarkdownV2'
         )
 
     else:
-        await update.message.reply_text("❌ Error al guardar el registro.")
+        await update.message.reply_text("❌ Error Crítico: No se pudo guardar el registro en el archivo.")
 
     # Clean up user data
     del user_data[chat_id]
@@ -330,76 +331,238 @@ async def cancel_conversation(update: Update, context: ContextTypes.DEFAULT_TYPE
     chat_id = update.message.chat.id
     if chat_id in user_data:
         del user_data[chat_id]
+    # Use context.user_data for other conversations
+    keys_to_remove = [k for k in context.user_data if k.endswith('_index') or k.endswith('_data') or k.endswith('_field')]
+    for key in keys_to_remove:
+        del context.user_data[key]
+
     await update.message.reply_text(
-        "Registro cancelado.", reply_markup=ReplyKeyboardRemove()
+        "🚫 Operación cancelada.", reply_markup=ReplyKeyboardRemove()
     )
     # Show main menu again
     await send_main_menu(chat_id, context)
     return ConversationHandler.END
 
 # --- Add Account Conversation ---
-ADD_SERVICE, ADD_USERNAME, ADD_PASSWORD, ADD_PLAN, ADD_RENEWAL_DATE, ADD_PIN = range(8, 14) # Continue numbering
+# Renamed state for clarity
+ADD_SERVICE, ADD_USERNAME, ADD_PASSWORD, ADD_PLAN, ADD_REGISTRATION_DATE, ADD_PIN = range(8, 14) # Continue numbering
 
 @callback_restricted
 async def add_account_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Starts the add account conversation."""
     query = update.callback_query
     chat_id = query.message.chat.id
+    # Initialize lists to store message IDs for cleanup
+    context.user_data['bot_message_ids'] = [query.message.message_id] # Store the menu message ID
+    context.user_data['user_message_ids'] = []
     context.user_data['add_account_data'] = {} # Use context.user_data
-    await query.edit_message_text("Ok, vamos a añadir una nueva cuenta de streaming.")
-    await context.bot.send_message(chat_id=chat_id, text="1/6: ¿Nombre del Servicio?")
+
+    await query.edit_message_text("➕ Iniciando proceso para añadir nueva cuenta de streaming...")
+    # Store the ID of the message sent by the bot
+    sent_message = await context.bot.send_message(chat_id=chat_id, text="1/6: 🌐 Por favor, ingresa el nombre del servicio:")
+    context.user_data['bot_message_ids'].append(sent_message.message_id)
     return ADD_SERVICE
 
 async def ask_add_service(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    # Store user reply ID
+    context.user_data['user_message_ids'].append(update.message.message_id)
     context.user_data['add_account_data']['service'] = update.message.text
-    await update.message.reply_text("2/6: ¿Nombre de Usuario (email)?")
+    # Store bot question ID
+    sent_message = await update.message.reply_text("2/6: 📧 Ingresa el nombre de usuario (generalmente el email):")
+    context.user_data['bot_message_ids'].append(sent_message.message_id)
     return ADD_USERNAME
 
 async def ask_add_username(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    # Store user reply ID
+    context.user_data['user_message_ids'].append(update.message.message_id)
     context.user_data['add_account_data']['username'] = update.message.text
-    await update.message.reply_text("3/6: ¿Contraseña?")
+    # Store bot question ID
+    sent_message = await update.message.reply_text("3/6: 🔑 Ingresa la contraseña de la cuenta:")
+    context.user_data['bot_message_ids'].append(sent_message.message_id)
     return ADD_PASSWORD
 
 async def ask_add_password(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    # Store user reply ID
+    context.user_data['user_message_ids'].append(update.message.message_id)
     context.user_data['add_account_data']['password'] = update.message.text
-    await update.message.reply_text("4/6: ¿Plan contratado?")
+    # Store bot question ID
+    sent_message = await update.message.reply_text("4/6: 🏷️ ¿Cuál es el plan contratado?")
+    context.user_data['bot_message_ids'].append(sent_message.message_id)
     return ADD_PLAN
 
 async def ask_add_plan(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    # Store user reply ID
+    context.user_data['user_message_ids'].append(update.message.message_id)
     context.user_data['add_account_data']['plan'] = update.message.text
-    await update.message.reply_text("5/6: ¿Fecha de Renovación (YYYY-MM-DD)?")
-    return ADD_RENEWAL_DATE
+    # Store bot question ID
+    sent_message = await update.message.reply_text("5/6: 📅 Ingresa la fecha de registro inicial (Formato: YYYY-MM-DD):")
+    context.user_data['bot_message_ids'].append(sent_message.message_id)
+    return ADD_REGISTRATION_DATE # Go to the new state
 
-async def ask_add_renewal_date(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    # Add date validation here if needed
-    context.user_data['add_account_data']['renewal_date'] = update.message.text
-    await update.message.reply_text("6/6: ¿PIN (opcional, escribe 'N/A' si no tiene)?")
-    return ADD_PIN
+# Renamed function and added date calculation logic
+async def ask_add_registration_date(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Stores registration date, calculates renewal date, asks for PIN."""
+    # Store user reply ID
+    context.user_data['user_message_ids'].append(update.message.message_id)
+    registration_date_str = update.message.text
+    try:
+        # Validate and parse registration date
+        registration_dt = datetime.strptime(registration_date_str, '%Y-%m-%d')
+        context.user_data['add_account_data']['registration_date'] = registration_date_str
 
-async def save_add_account(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Stores the PIN, saves the account, and ends the conversation."""
-    chat_id = update.message.chat.id
-    context.user_data['add_account_data']['pin'] = update.message.text
-    context.user_data['add_account_data']['creation_date'] = datetime.now().strftime('%Y-%m-%d')
+        # Calculate renewal date (+30 days)
+        renewal_dt = registration_dt + timedelta(days=30)
+        renewal_date_str = renewal_dt.strftime('%Y-%m-%d')
+        context.user_data['add_account_data']['renewal_date'] = renewal_date_str
 
-    accounts_data = load_data(DATA_FILE)
-    new_account = context.user_data['add_account_data']
-    accounts_data['accounts'].append(new_account)
+        logger.info(f"Registration: {registration_date_str}, Calculated Renewal: {renewal_date_str}")
 
-    if save_data(DATA_FILE, accounts_data):
-        await update.message.reply_text(
-            f"✅ ¡Cuenta añadida!\n"
-            f"Servicio: *{escape_markdown(new_account['service'], version=2)}*\n"
-            f"Usuario: `{escape_markdown(new_account['username'], version=2)}`\n"
-            f"Guardada exitosamente\\.",
+        # Ask for PIN
+        reg_date_escaped = escape_markdown(registration_date_str, version=2)
+        ren_date_escaped = escape_markdown(renewal_date_str, version=2)
+        # Store bot question ID
+        sent_message = await update.message.reply_text(
+            f"🗓️ Fecha de registro: `{reg_date_escaped}`\n"
+            f"🔄 Fecha de renovación calculada: `{ren_date_escaped}`\n\n"
+            f"6/6: 🔢 Ingresa el PIN de la cuenta (Escribe 'N/A' si no aplica):",
             parse_mode='MarkdownV2'
         )
-    else:
-        await update.message.reply_text("❌ Error al guardar la cuenta.")
+        context.user_data['bot_message_ids'].append(sent_message.message_id)
+        return ADD_PIN # Proceed to PIN state
 
-    # Clean up user data
-    del context.user_data['add_account_data']
-    # Show main menu again
+    except ValueError:
+        # Invalid date format
+        # Store bot error message ID
+        sent_message = await update.message.reply_text("⚠️ Formato de fecha inválido\\. Por favor, usa YYYY-MM-DD\\. Intenta de nuevo:")
+        context.user_data['bot_message_ids'].append(sent_message.message_id)
+        return ADD_REGISTRATION_DATE # Ask for registration date again
+
+async def save_add_account(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Stores the PIN, saves the account, deletes conversation messages, shows summary, and ends."""
+    chat_id = update.message.chat.id
+    # Store user reply ID (final input)
+    context.user_data.setdefault('user_message_ids', []).append(update.message.message_id)
+
+    save_successful = False
+    summary_message_text = "❌ Ocurrió un error inesperado al procesar la cuenta." # Default message
+
+    try:
+        # Ensure data exists before proceeding
+        if 'add_account_data' not in context.user_data:
+             logger.error("save_add_account called without add_account_data in context.")
+             summary_message_text = "❌ Ocurrió un error inesperado al procesar los datos. Por favor, cancela (/cancel) e intenta de nuevo."
+        else:
+            context.user_data['add_account_data']['pin'] = update.message.text
+            context.user_data['add_account_data']['creation_date'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+            accounts_data = load_data(DATA_FILE)
+            new_account = context.user_data['add_account_data']
+
+            if 'registration_date' not in new_account or 'renewal_date' not in new_account:
+                 logger.error(f"Missing dates in new_account data: {new_account}")
+                 summary_message_text = "❌ Faltan datos de fecha. Por favor, cancela (/cancel) e intenta de nuevo."
+            else:
+                accounts_data['accounts'].append(new_account)
+
+                if save_data(DATA_FILE, accounts_data):
+                    save_successful = True
+                    logger.info(f"Account added successfully: {new_account.get('service')} - {new_account.get('username')}")
+                    # Construct Summary Message (code unchanged from previous step)
+                    # ... summary message construction ...
+                    service_escaped = escape_markdown(new_account.get('service', 'N/A'), version=2)
+                    username_escaped = escape_markdown(new_account.get('username', 'N/A'), version=2)
+                    password_masked = escape_markdown("*" * len(new_account.get('password', '')), version=2) if new_account.get('password') else 'N/A'
+                    pin_masked = escape_markdown("*" * len(new_account.get('pin', '')), version=2) if new_account.get('pin') and new_account.get('pin').upper() != 'N/A' else 'N/A'
+                    plan_escaped = escape_markdown(new_account.get('plan', 'N/A'), version=2)
+                    reg_date_escaped = escape_markdown(new_account.get('registration_date', 'N/A'), version=2)
+                    ren_date_escaped = escape_markdown(new_account.get('renewal_date', 'N/A'), version=2)
+                    creation_date_escaped = escape_markdown(new_account.get('creation_date', 'N/A'), version=2)
+
+                    summary_message_text = (
+                        f"✅ *¡Cuenta Añadida Exitosamente!*\n\n"
+                        f"*Resumen:*\n"
+                        f" Servicio: *{service_escaped}*\n"
+                        f" Usuario: `{username_escaped}`\n"
+                        f" Contraseña: `{password_masked}`\n"
+                        f" PIN: `{pin_masked}`\n"
+                        f" Plan: `{plan_escaped}`\n"
+                        f" Fecha Registro: `{reg_date_escaped}`\n"
+                        f" Fecha Renovación: `{ren_date_escaped}`\n"
+                        f" Fecha Creación Bot: `{creation_date_escaped}`"
+                    )
+                else:
+                    summary_message_text = "❌ Error al guardar la cuenta en el archivo."
+                    logger.error("Failed to save account data to file.")
+
+    except Exception as e:
+        logger.error(f"Error in save_add_account: {e}", exc_info=True)
+        summary_message_text = "❌ Ocurrió un error inesperado al guardar la cuenta."
+    finally:
+        # Delete conversation messages BEFORE sending the final summary
+        await delete_conversation_messages(context, chat_id)
+
+        # Send the final summary/error message
+        # This summary message will NOT be deleted by the current logic
+        await context.bot.send_message(chat_id=chat_id, text=summary_message_text, parse_mode='MarkdownV2')
+
+        # Clean up specific conversation data (add_account_data)
+        if 'add_account_data' in context.user_data:
+            del context.user_data['add_account_data']
+        # Note: delete_conversation_messages already cleaned up bot_message_ids and user_message_ids
+
+        # Show main menu again
+        await send_main_menu(chat_id, context)
+        return ConversationHandler.END # Ensure conversation ends
+
+# --- Helper function to delete messages ---
+async def delete_conversation_messages(context: ContextTypes.DEFAULT_TYPE, chat_id: int):
+    """Deletes messages stored in context.user_data for the conversation."""
+    # Delete bot messages
+    if 'bot_message_ids' in context.user_data:
+        logger.debug(f"Attempting to delete bot messages: {context.user_data['bot_message_ids']}")
+        for msg_id in context.user_data['bot_message_ids']:
+            try:
+                await context.bot.delete_message(chat_id=chat_id, message_id=msg_id)
+            except Exception as e:
+                # Ignore errors if message is already deleted or too old
+                logger.warning(f"Could not delete bot message {msg_id} in chat {chat_id}: {e}")
+        del context.user_data['bot_message_ids'] # Clean up
+
+    # Delete user messages
+    if 'user_message_ids' in context.user_data:
+        logger.debug(f"Attempting to delete user messages: {context.user_data['user_message_ids']}")
+        for msg_id in context.user_data['user_message_ids']:
+            try:
+                await context.bot.delete_message(chat_id=chat_id, message_id=msg_id)
+            except Exception as e:
+                # Ignore errors if message is already deleted or too old
+                logger.warning(f"Could not delete user message {msg_id} in chat {chat_id}: {e}")
+        del context.user_data['user_message_ids'] # Clean up
+
+# --- Generic Cancel Command ---
+@restricted # Make sure only admin can cancel
+async def cancel_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Generic cancel handler for any conversation."""
+    chat_id = update.effective_chat.id # Use effective_chat for broader compatibility
+    user_id = update.effective_user.id
+    logger.info(f"Cancel command initiated by user {user_id} in chat {chat_id}.")
+
+    # Delete messages from the conversation
+    await delete_conversation_messages(context, chat_id)
+
+    # Clean up any potential user_data remnants (specific to conversations)
+    keys_to_remove = [k for k in context.user_data if k.endswith('_index') or k.endswith('_data') or k.endswith('_field')]
+    for key in keys_to_remove:
+        logger.debug(f"Removing key from user_data during cancel: {key}")
+        del context.user_data[key]
+
+    # Send cancellation confirmation and remove reply keyboard if any
+    cancel_msg = await update.message.reply_text(
+        "🚫 Operación cancelada.", reply_markup=ReplyKeyboardRemove()
+    )
+    # Optionally delete the cancel command itself and the confirmation after a delay
+    # This part is more complex and might require JobQueue, skipping for now.
+
     await send_main_menu(chat_id, context)
     return ConversationHandler.END
 
@@ -419,7 +582,7 @@ async def view_account_start(update: Update, context: ContextTypes.DEFAULT_TYPE)
          await send_main_menu(chat_id, context) # Show menu again
          return ConversationHandler.END
 
-    await query.edit_message_text(f"{list_output}\n\nPor favor, ingresa el número de la cuenta a ver:", parse_mode='MarkdownV2')
+    await query.edit_message_text(f"{list_output}\n\n🔢 Por favor, ingresa el número de la cuenta que deseas visualizar:", parse_mode='MarkdownV2')
     return VIEW_ACCOUNT_NUMBER
 
 async def process_view_account_number(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -432,18 +595,31 @@ async def process_view_account_number(update: Update, context: ContextTypes.DEFA
 
         if 0 <= index < len(accounts):
             account = accounts[index]
-            details = "*Detalles Cuenta #{}*\n```\n".format(index + 1)
+            details = f"📄 *Detalles Cuenta #{index + 1}*\n```\n" # Added emoji
+            # Define the desired order of keys
+            key_order = ["service", "username", "password", "pin", "plan", "registration_date", "renewal_date", "creation_date"]
+            for key in key_order:
+                if key in account: # Check if key exists
+                    value = account[key]
+                    # Escape value for MarkdownV2
+                    escaped_value = escape_markdown(str(value), version=2)
+                    # Capitalize key for display
+                    display_key = key.replace('_', ' ').capitalize()
+                    details += f"{display_key}: {escaped_value}\n"
+            # Add any remaining keys not in the defined order
             for key, value in account.items():
-                # Escape value for MarkdownV2
-                escaped_value = escape_markdown(str(value), version=2)
-                details += f"{key}: {escaped_value}\n"
+                if key not in key_order:
+                    escaped_value = escape_markdown(str(value), version=2)
+                    display_key = key.replace('_', ' ').capitalize()
+                    details += f"{display_key}: {escaped_value}\n"
+
             details += "```"
             await update.message.reply_text(details, parse_mode='MarkdownV2')
         else:
-            await update.message.reply_text(f"Número fuera de rango\\. Hay {len(accounts)} cuentas\\.", parse_mode='MarkdownV2')
+            await update.message.reply_text(f"⚠️ Número fuera de rango\\. Hay {len(accounts)} cuentas\\.", parse_mode='MarkdownV2')
 
     except (ValueError, IndexError):
-        await update.message.reply_text("Número inválido\\. Por favor, ingresa solo el número de la lista\\.", parse_mode='MarkdownV2')
+        await update.message.reply_text("⚠️ Número inválido\\. Por favor, ingresa solo el número de la lista\\.", parse_mode='MarkdownV2')
 
     # Show main menu again
     await send_main_menu(chat_id, context)
@@ -465,7 +641,7 @@ async def delete_account_start(update: Update, context: ContextTypes.DEFAULT_TYP
          await send_main_menu(chat_id, context)
          return ConversationHandler.END
 
-    await query.edit_message_text(f"{list_output}\n\nPor favor, ingresa el número de la cuenta a *eliminar*:", parse_mode='MarkdownV2')
+    await query.edit_message_text(f"{list_output}\n\n🗑️ Por favor, ingresa el número de la cuenta que deseas *eliminar*:", parse_mode='MarkdownV2')
     return DELETE_ACCOUNT_NUMBER
 
 async def ask_delete_account_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -481,24 +657,26 @@ async def ask_delete_account_confirm(update: Update, context: ContextTypes.DEFAU
             account = accounts[index]
             service = escape_markdown(account.get('service', 'N/A'), version=2)
             username = escape_markdown(account.get('username', 'N/A'), version=2)
-            keyboard = [[InlineKeyboardButton("Sí, eliminar", callback_data='confirm_delete_yes'),
-                         InlineKeyboardButton("No, cancelar", callback_data='confirm_delete_no')]]
+            keyboard = [[InlineKeyboardButton("✔️ Sí, eliminar", callback_data='confirm_delete_yes'),
+                         InlineKeyboardButton("✖️ No, cancelar", callback_data='confirm_delete_no')]]
             reply_markup = InlineKeyboardMarkup(keyboard)
             await update.message.reply_text(
-                f"¿Estás seguro de que quieres eliminar la cuenta #{index + 1}?\n"
-                f"Servicio: *{service}*\n"
-                f"Usuario: `{username}`",
+                f"❓ *Confirmación de Eliminación*\n\n"
+                f"¿Estás seguro de que quieres eliminar la cuenta #{index + 1}?\n\n"
+                f"🌐 Servicio: *{service}*\n"
+                f"📧 Usuario: `{username}`\n\n"
+                f"⚠️ *Esta acción no se puede deshacer\\.*",
                 reply_markup=reply_markup,
                 parse_mode='MarkdownV2'
             )
             return DELETE_ACCOUNT_CONFIRM
         else:
-            await update.message.reply_text(f"Número fuera de rango\\. Hay {len(accounts)} cuentas\\.", parse_mode='MarkdownV2')
+            await update.message.reply_text(f"⚠️ Número fuera de rango\\. Hay {len(accounts)} cuentas\\.", parse_mode='MarkdownV2')
             await send_main_menu(chat_id, context)
             return ConversationHandler.END
 
     except (ValueError, IndexError):
-        await update.message.reply_text("Número inválido\\. Por favor, ingresa solo el número de la lista\\.", parse_mode='MarkdownV2')
+        await update.message.reply_text("⚠️ Número inválido\\. Por favor, ingresa solo el número de la lista\\.", parse_mode='MarkdownV2')
         await send_main_menu(chat_id, context)
         return ConversationHandler.END
 
@@ -512,7 +690,7 @@ async def process_delete_account_confirm(update: Update, context: ContextTypes.D
     if decision == 'confirm_delete_yes' and 'delete_index' in context.user_data:
         index_to_delete = context.user_data['delete_index']
         accounts_data = load_data(DATA_FILE)
-        accounts = accounts_data.get("accounts", [])
+        accounts = accounts.get("accounts", [])
 
         if 0 <= index_to_delete < len(accounts):
             deleted_account = accounts.pop(index_to_delete)
@@ -520,13 +698,13 @@ async def process_delete_account_confirm(update: Update, context: ContextTypes.D
                 service = escape_markdown(deleted_account.get('service', 'N/A'), version=2)
                 await query.edit_message_text(f"✅ Cuenta #{index_to_delete + 1} (*{service}*) eliminada exitosamente\\.", parse_mode='MarkdownV2')
             else:
-                await query.edit_message_text("❌ Error al guardar los cambios después de eliminar la cuenta\\.", parse_mode='MarkdownV2')
+                await query.edit_message_text("❌ Error Crítico: No se pudo guardar los cambios después de eliminar la cuenta\\.", parse_mode='MarkdownV2')
         else:
-             await query.edit_message_text("❌ Error: Índice inválido encontrado durante la confirmación\\.", parse_mode='MarkdownV2') # Should not happen normally
+             await query.edit_message_text("❌ Error Interno: Índice inválido encontrado durante la confirmación\\.", parse_mode='MarkdownV2') # Should not happen normally
     elif decision == 'confirm_delete_no':
-        await query.edit_message_text("Eliminación cancelada\\.", parse_mode='MarkdownV2')
+        await query.edit_message_text("🚫 Eliminación cancelada\\.", parse_mode='MarkdownV2')
     else:
-         await query.edit_message_text("Acción desconocida o índice no encontrado\\. Cancelando\\.", parse_mode='MarkdownV2')
+         await query.edit_message_text("❓ Acción desconocida o índice no encontrado\\. Cancelando\\.", parse_mode='MarkdownV2')
 
     # Clean up and show menu
     if 'delete_index' in context.user_data:
@@ -537,6 +715,7 @@ async def process_delete_account_confirm(update: Update, context: ContextTypes.D
 
 # --- Edit Account Conversation ---
 EDIT_ACCOUNT_NUMBER, EDIT_ACCOUNT_FIELD, EDIT_ACCOUNT_VALUE = range(17, 20)
+# Keep renewal_date editable, registration_date is usually fixed. Add creation_date if needed.
 VALID_EDIT_FIELDS = ["service", "username", "password", "pin", "plan", "renewal_date"]
 
 @callback_restricted
@@ -552,7 +731,7 @@ async def edit_account_start(update: Update, context: ContextTypes.DEFAULT_TYPE)
          await send_main_menu(chat_id, context)
          return ConversationHandler.END
 
-    await query.edit_message_text(f"{list_output}\n\nPor favor, ingresa el número de la cuenta a *editar*:", parse_mode='MarkdownV2')
+    await query.edit_message_text(f"{list_output}\n\n✏️ Por favor, ingresa el número de la cuenta que deseas *editar*:", parse_mode='MarkdownV2')
     return EDIT_ACCOUNT_NUMBER
 
 async def ask_edit_account_field(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -568,27 +747,32 @@ async def ask_edit_account_field(update: Update, context: ContextTypes.DEFAULT_T
             account = accounts[index]
             service = escape_markdown(account.get('service', 'N/A'), version=2)
 
-            # Create buttons for valid fields
+            # Create buttons for valid fields with emojis
+            field_emojis = {
+                "service": "🌐", "username": "📧", "password": "🔑",
+                "pin": "🔢", "plan": "🏷️", "renewal_date": "🔄"
+            }
             buttons = []
             for field in VALID_EDIT_FIELDS:
-                 buttons.append([InlineKeyboardButton(field.capitalize(), callback_data=f'edit_field_{field}')])
-            buttons.append([InlineKeyboardButton("Cancelar Edición", callback_data='edit_field_cancel')])
+                 emoji = field_emojis.get(field, "⚙️") # Default emoji
+                 buttons.append([InlineKeyboardButton(f"{emoji} {field.capitalize()}", callback_data=f'edit_field_{field}')])
+            buttons.append([InlineKeyboardButton("✖️ Cancelar Edición", callback_data='edit_field_cancel')])
             reply_markup = InlineKeyboardMarkup(buttons)
 
             await update.message.reply_text(
-                f"Editando cuenta #{index + 1} (*{service}*)\\.\n"
-                f"¿Qué campo deseas modificar?",
+                f"✏️ Editando cuenta #{index + 1} (*{service}*)\\.\n\n"
+                f"Selecciona el campo que deseas modificar:",
                 reply_markup=reply_markup,
                 parse_mode='MarkdownV2'
             )
             return EDIT_ACCOUNT_FIELD
         else:
-            await update.message.reply_text(f"Número fuera de rango\\. Hay {len(accounts)} cuentas\\.", parse_mode='MarkdownV2')
+            await update.message.reply_text(f"⚠️ Número fuera de rango\\. Hay {len(accounts)} cuentas\\.", parse_mode='MarkdownV2')
             await send_main_menu(chat_id, context)
             return ConversationHandler.END
 
     except (ValueError, IndexError):
-        await update.message.reply_text("Número inválido\\. Por favor, ingresa solo el número de la lista\\.", parse_mode='MarkdownV2')
+        await update.message.reply_text("⚠️ Número inválido\\. Por favor, ingresa solo el número de la lista\\.", parse_mode='MarkdownV2')
         await send_main_menu(chat_id, context)
         return ConversationHandler.END
 
@@ -600,26 +784,27 @@ async def ask_edit_account_value(update: Update, context: ContextTypes.DEFAULT_T
     field_choice = query.data # e.g., 'edit_field_username' or 'edit_field_cancel'
 
     if field_choice == 'edit_field_cancel':
-        await query.edit_message_text("Edición cancelada\\.", parse_mode='MarkdownV2')
+        await query.edit_message_text("🚫 Edición cancelada\\.", parse_mode='MarkdownV2')
         if 'edit_index' in context.user_data: del context.user_data['edit_index']
         await send_main_menu(chat_id, context)
         return ConversationHandler.END
 
     if not field_choice.startswith('edit_field_'):
-        await query.edit_message_text("Opción inválida\\. Cancelando edición\\.", parse_mode='MarkdownV2')
+        await query.edit_message_text("❓ Opción inválida\\. Cancelando edición\\.", parse_mode='MarkdownV2')
         if 'edit_index' in context.user_data: del context.user_data['edit_index']
         await send_main_menu(chat_id, context)
         return ConversationHandler.END
 
     field_to_edit = field_choice.split('edit_field_')[1]
     if field_to_edit not in VALID_EDIT_FIELDS:
-        await query.edit_message_text(f"Campo '{field_to_edit}' no es válido para edición\\. Cancelando\\.", parse_mode='MarkdownV2')
+        await query.edit_message_text(f"❌ Campo '{escape_markdown(field_to_edit, version=2)}' no es válido para edición\\. Cancelando\\.", parse_mode='MarkdownV2')
         if 'edit_index' in context.user_data: del context.user_data['edit_index']
         await send_main_menu(chat_id, context)
         return ConversationHandler.END
 
     context.user_data['edit_field'] = field_to_edit
-    await query.edit_message_text(f"Ingresa el nuevo valor para *{escape_markdown(field_to_edit, version=2)}*:", parse_mode='MarkdownV2')
+    field_display = field_to_edit.replace('_', ' ').capitalize()
+    await query.edit_message_text(f"✍️ Ingresa el nuevo valor para *{escape_markdown(field_display, version=2)}*:", parse_mode='MarkdownV2')
     return EDIT_ACCOUNT_VALUE
 
 async def save_edit_account(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -628,7 +813,7 @@ async def save_edit_account(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     new_value = update.message.text
 
     if 'edit_index' not in context.user_data or 'edit_field' not in context.user_data:
-        await update.message.reply_text("Error: No se encontró información de edición\\. Cancelando\\.", parse_mode='MarkdownV2')
+        await update.message.reply_text("❌ Error Interno: No se encontró información de edición\\. Cancelando\\.", parse_mode='MarkdownV2')
         if 'edit_index' in context.user_data: del context.user_data['edit_index']
         if 'edit_field' in context.user_data: del context.user_data['edit_field']
         await send_main_menu(chat_id, context)
@@ -642,7 +827,7 @@ async def save_edit_account(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         try:
             datetime.strptime(new_value, '%Y-%m-%d')
         except ValueError:
-            await update.message.reply_text("Formato de fecha inválido para renewal_date\\. Usa YYYY-MM-DD\\. Intenta editar de nuevo\\.", parse_mode='MarkdownV2')
+            await update.message.reply_text("⚠️ Formato de fecha inválido para Fecha de Renovación\\. Usa YYYY-MM-DD\\. Por favor, inicia la edición de nuevo\\.", parse_mode='MarkdownV2')
             # Clean up and end, forcing user to restart edit
             del context.user_data['edit_index']
             del context.user_data['edit_field']
@@ -655,12 +840,12 @@ async def save_edit_account(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     if 0 <= index_to_edit < len(accounts):
         accounts[index_to_edit][field_to_edit] = new_value
         if save_data(DATA_FILE, accounts_data):
-            field_md = escape_markdown(field_to_edit, version=2)
-            await update.message.reply_text(f"✅ Cuenta #{index_to_edit + 1} actualizada\\. Campo `{field_md}` modificado\\.", parse_mode='MarkdownV2')
+            field_md = escape_markdown(field_to_edit.replace('_', ' ').capitalize(), version=2)
+            await update.message.reply_text(f"✅ *Cuenta Actualizada*\n\nLa cuenta #{index_to_edit + 1} ha sido actualizada\\. El campo `{field_md}` fue modificado\\.", parse_mode='MarkdownV2')
         else:
-            await update.message.reply_text("❌ Error al guardar los cambios de la cuenta\\.", parse_mode='MarkdownV2')
+            await update.message.reply_text("❌ Error Crítico: No se pudieron guardar los cambios de la cuenta\\.", parse_mode='MarkdownV2')
     else:
-        await update.message.reply_text("❌ Error: Índice inválido encontrado durante el guardado\\.", parse_mode='MarkdownV2')
+        await update.message.reply_text("❌ Error Interno: Índice inválido encontrado durante el guardado\\.", parse_mode='MarkdownV2')
 
     # Clean up and show menu
     del context.user_data['edit_index']
@@ -685,7 +870,7 @@ async def delete_reg_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -
          await send_main_menu(chat_id, context)
          return ConversationHandler.END
 
-    await query.edit_message_text(f"{list_output}\n\nPor favor, ingresa el número del registro a *eliminar*:", parse_mode='MarkdownV2')
+    await query.edit_message_text(f"{list_output}\n\n❌ Por favor, ingresa el número del registro de usuario que deseas *eliminar*:", parse_mode='MarkdownV2')
     return DELETE_REG_NUMBER
 
 async def ask_delete_reg_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -701,24 +886,26 @@ async def ask_delete_reg_confirm(update: Update, context: ContextTypes.DEFAULT_T
             reg = registrations[index]
             name = escape_markdown(reg.get('name', 'N/A'), version=2)
             platform = escape_markdown(reg.get('platform', 'N/A'), version=2)
-            keyboard = [[InlineKeyboardButton("Sí, eliminar", callback_data='confirm_delreg_yes'),
-                         InlineKeyboardButton("No, cancelar", callback_data='confirm_delreg_no')]]
+            keyboard = [[InlineKeyboardButton("✔️ Sí, eliminar", callback_data='confirm_delreg_yes'),
+                         InlineKeyboardButton("✖️ No, cancelar", callback_data='confirm_delreg_no')]]
             reply_markup = InlineKeyboardMarkup(keyboard)
             await update.message.reply_text(
-                f"¿Estás seguro de que quieres eliminar el registro #{index + 1}?\n"
-                f"Usuario: *{name}*\n"
-                f"Plataforma: *{platform}*",
+                f"❓ *Confirmación de Eliminación de Registro*\n\n"
+                f"¿Estás seguro de que quieres eliminar el registro #{index + 1}?\n\n"
+                f"👤 Usuario: *{name}*\n"
+                f"📺 Plataforma: *{platform}*\n\n"
+                f"⚠️ *Esta acción no se puede deshacer\\.*",
                 reply_markup=reply_markup,
                 parse_mode='MarkdownV2'
             )
             return DELETE_REG_CONFIRM
         else:
-            await update.message.reply_text(f"Número fuera de rango\\. Hay {len(registrations)} registros\\.", parse_mode='MarkdownV2')
+            await update.message.reply_text(f"⚠️ Número fuera de rango\\. Hay {len(registrations)} registros\\.", parse_mode='MarkdownV2')
             await send_main_menu(chat_id, context)
             return ConversationHandler.END
 
     except (ValueError, IndexError):
-        await update.message.reply_text("Número inválido\\. Por favor, ingresa solo el número de la lista\\.", parse_mode='MarkdownV2')
+        await update.message.reply_text("⚠️ Número inválido\\. Por favor, ingresa solo el número de la lista\\.", parse_mode='MarkdownV2')
         await send_main_menu(chat_id, context)
         return ConversationHandler.END
 
@@ -741,13 +928,13 @@ async def process_delete_reg_confirm(update: Update, context: ContextTypes.DEFAU
                 platform = escape_markdown(deleted_reg.get('platform', 'N/A'), version=2)
                 await query.edit_message_text(f"✅ Registro #{index_to_delete + 1} (*{name}* \\- *{platform}*) eliminado exitosamente\\.", parse_mode='MarkdownV2')
             else:
-                await query.edit_message_text("❌ Error al guardar los cambios después de eliminar el registro\\.", parse_mode='MarkdownV2')
+                await query.edit_message_text("❌ Error Crítico: No se pudieron guardar los cambios después de eliminar el registro\\.", parse_mode='MarkdownV2')
         else:
-             await query.edit_message_text("❌ Error: Índice inválido encontrado durante la confirmación\\.", parse_mode='MarkdownV2')
+             await query.edit_message_text("❌ Error Interno: Índice inválido encontrado durante la confirmación\\.", parse_mode='MarkdownV2')
     elif decision == 'confirm_delreg_no':
-        await query.edit_message_text("Eliminación cancelada\\.", parse_mode='MarkdownV2')
+        await query.edit_message_text("🚫 Eliminación cancelada\\.", parse_mode='MarkdownV2')
     else:
-         await query.edit_message_text("Acción desconocida o índice no encontrado\\. Cancelando\\.", parse_mode='MarkdownV2')
+         await query.edit_message_text("❓ Acción desconocida o índice no encontrado\\. Cancelando\\.", parse_mode='MarkdownV2')
 
     # Clean up and show menu
     if 'delete_reg_index' in context.user_data:
@@ -916,6 +1103,81 @@ async def check_license(context: ContextTypes.DEFAULT_TYPE):
         context.application.stop()
 
 
+# --- Conversation Handler Definitions ---
+
+# Registration Conversation Handler
+reg_conv_handler = ConversationHandler(
+    entry_points=[CallbackQueryHandler(register_user_start, pattern='^register_user_start$')],
+    states={
+        PLATFORM: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_platform)],
+        NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_name)],
+        PHONE: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_phone)],
+        PAYMENT_TYPE: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_payment_type)],
+        EMAIL: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_email)],
+        PIN: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_pin)],
+        START_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_start_date)],
+        END_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_end_date)],
+    },
+    fallbacks=[CommandHandler('cancel', cancel_command)],
+    # Optional: Add conversation timeout
+    # conversation_timeout=timedelta(minutes=5).total_seconds()
+)
+
+# Add Account Conversation Handler
+add_account_conv_handler = ConversationHandler(
+    entry_points=[CallbackQueryHandler(add_account_start, pattern='^add_account_prompt$')],
+    states={
+        ADD_SERVICE: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_add_service)],
+        ADD_USERNAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_add_username)],
+        ADD_PASSWORD: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_add_password)],
+        ADD_PLAN: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_add_plan)],
+        ADD_REGISTRATION_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_add_registration_date)],
+        ADD_PIN: [MessageHandler(filters.TEXT & ~filters.COMMAND, save_add_account)],
+    },
+    fallbacks=[CommandHandler('cancel', cancel_command)],
+)
+
+# View Account Conversation Handler
+view_account_conv_handler = ConversationHandler(
+    entry_points=[CallbackQueryHandler(view_account_start, pattern='^view_account_prompt$')],
+    states={
+        VIEW_ACCOUNT_NUMBER: [MessageHandler(filters.TEXT & ~filters.COMMAND, process_view_account_number)],
+    },
+    fallbacks=[CommandHandler('cancel', cancel_command)],
+)
+
+# Delete Account Conversation Handler
+delete_account_conv_handler = ConversationHandler(
+    entry_points=[CallbackQueryHandler(delete_account_start, pattern='^delete_account_prompt$')],
+    states={
+        DELETE_ACCOUNT_NUMBER: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_delete_account_confirm)],
+        DELETE_ACCOUNT_CONFIRM: [CallbackQueryHandler(process_delete_account_confirm, pattern='^confirm_delete_(yes|no)$')],
+    },
+    fallbacks=[CommandHandler('cancel', cancel_command)],
+)
+
+# Edit Account Conversation Handler
+edit_account_conv_handler = ConversationHandler(
+    entry_points=[CallbackQueryHandler(edit_account_start, pattern='^edit_account_prompt$')],
+    states={
+        EDIT_ACCOUNT_NUMBER: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_edit_account_field)],
+        EDIT_ACCOUNT_FIELD: [CallbackQueryHandler(ask_edit_account_value, pattern='^edit_field_')], # Handles button press
+        EDIT_ACCOUNT_VALUE: [MessageHandler(filters.TEXT & ~filters.COMMAND, save_edit_account)],
+    },
+    fallbacks=[CommandHandler('cancel', cancel_command), CallbackQueryHandler(ask_edit_account_value, pattern='^edit_field_cancel$')], # Allow cancel via button too
+)
+
+# Delete Registration Conversation Handler
+delete_reg_conv_handler = ConversationHandler(
+    entry_points=[CallbackQueryHandler(delete_reg_start, pattern='^delete_reg_prompt$')],
+    states={
+        DELETE_REG_NUMBER: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_delete_reg_confirm)],
+        DELETE_REG_CONFIRM: [CallbackQueryHandler(process_delete_reg_confirm, pattern='^confirm_delreg_(yes|no)$')],
+    },
+    fallbacks=[CommandHandler('cancel', cancel_command)],
+)
+
+
 # --- Main Function ---
 def main() -> None:
     """Start the bot."""
@@ -942,86 +1204,6 @@ def main() -> None:
 
     # --- Setup Job Queue for Periodic Tasks ---
     job_queue = application.job_queue
-    # Check license every hour (3600 seconds)
-    job_queue.run_repeating(check_license, interval=3600, first=10, name="license_check_hourly")
-    # Add renewal check job here later
-    # job_queue.run_repeating(check_renewals, interval=21600, first=60, name="renewal_check_6hourly")
-
-
-    # --- Conversation Handlers ---
-    # Registration
-    reg_conv_handler = ConversationHandler(
-        entry_points=[CallbackQueryHandler(register_user_start, pattern='^register_user_start$')],
-        states={
-            PLATFORM: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_platform)],
-            NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_name)],
-            PHONE: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_phone)],
-            PAYMENT_TYPE: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_payment_type)],
-            EMAIL: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_email)],
-            PIN: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_pin)],
-            START_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_start_date)],
-            END_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_end_date)],
-        },
-        fallbacks=[CommandHandler('cancel', cancel_command)], # Use generic cancel
-    )
-
-    # Add Account
-    add_account_conv_handler = ConversationHandler(
-        entry_points=[CallbackQueryHandler(add_account_start, pattern='^add_account_prompt$')],
-        states={
-            ADD_SERVICE: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_add_service)],
-            ADD_USERNAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_add_username)],
-            ADD_PASSWORD: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_add_password)],
-            ADD_PLAN: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_add_plan)],
-            ADD_RENEWAL_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_add_renewal_date)],
-            ADD_PIN: [MessageHandler(filters.TEXT & ~filters.COMMAND, save_add_account)],
-        },
-        fallbacks=[CommandHandler('cancel', cancel_command)],
-    )
-
-    # View Account
-    view_account_conv_handler = ConversationHandler(
-        entry_points=[CallbackQueryHandler(view_account_start, pattern='^view_account_prompt$')],
-        states={
-            VIEW_ACCOUNT_NUMBER: [MessageHandler(filters.TEXT & ~filters.COMMAND, process_view_account_number)],
-        },
-        fallbacks=[CommandHandler('cancel', cancel_command)],
-    )
-
-    # Delete Account
-    delete_account_conv_handler = ConversationHandler(
-        entry_points=[CallbackQueryHandler(delete_account_start, pattern='^delete_account_prompt$')],
-        states={
-            DELETE_ACCOUNT_NUMBER: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_delete_account_confirm)],
-            DELETE_ACCOUNT_CONFIRM: [CallbackQueryHandler(process_delete_account_confirm, pattern='^confirm_delete_(yes|no)$')],
-        },
-        fallbacks=[CommandHandler('cancel', cancel_command)],
-    )
-
-    # Edit Account
-    edit_account_conv_handler = ConversationHandler(
-        entry_points=[CallbackQueryHandler(edit_account_start, pattern='^edit_account_prompt$')],
-        states={
-            EDIT_ACCOUNT_NUMBER: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_edit_account_field)],
-            EDIT_ACCOUNT_FIELD: [CallbackQueryHandler(ask_edit_account_value, pattern='^edit_field_')], # Handles field buttons
-            EDIT_ACCOUNT_VALUE: [MessageHandler(filters.TEXT & ~filters.COMMAND, save_edit_account)],
-        },
-        fallbacks=[CommandHandler('cancel', cancel_command)],
-    )
-
-    # Delete Registration
-    delete_reg_conv_handler = ConversationHandler(
-        entry_points=[CallbackQueryHandler(delete_reg_start, pattern='^delete_reg_prompt$')],
-        states={
-            DELETE_REG_NUMBER: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_delete_reg_confirm)],
-            DELETE_REG_CONFIRM: [CallbackQueryHandler(process_delete_reg_confirm, pattern='^confirm_delreg_(yes|no)$')],
-        },
-        fallbacks=[CommandHandler('cancel', cancel_command)],
-    )
-
-
-    # --- Command Handlers ---
-    application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("menu", menu_command))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("cancel", cancel_command)) # Ensure cancel works outside conversations too
