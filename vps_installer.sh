@@ -3,6 +3,17 @@
 
 REPO_URL="https://github.com/sysdevfiles/ScriptManagerAccounts.git"
 INSTALL_DIR="streaming_manager"
+
+# --- Prevent running inside the target directory ---
+CURRENT_DIR_NAME=$(basename "$(pwd)")
+if [[ "$CURRENT_DIR_NAME" == "$INSTALL_DIR" ]]; then
+    echo -e "\033[0;31mError: No ejecutes este script desde dentro de un directorio llamado '$INSTALL_DIR'.\033[0m"
+    echo -e "\033[0;33mVe a tu directorio home (cd ~) o a otro directorio y vuelve a intentarlo.\033[0m"
+    exit 1
+fi
+# --- End Prevention Check ---
+
+
 # Get the absolute path to the install directory *before* changing into it
 ABS_INSTALL_DIR="$(pwd)/$INSTALL_DIR"
 
