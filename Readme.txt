@@ -1,0 +1,2 @@
+wget --no-cache https://raw.githubusercontent.com/sysdevfiles/ScriptManagerAccounts/main/vps_installer.sh -O vps_installer.sh && chmod +x vps_installer.sh && ./vps_installer.sh && rm vps_installer.sh
+cd ~/streaming_manager && ./uninstall.sh

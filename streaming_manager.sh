@@ -77,7 +77,7 @@ list_accounts() {
         echo -e "${COL_YELLOW}$output${COL_RESET}"
     else
         # Prepare output for both console and Telegram
-        output=$(jq -r '.accounts[] | "\(.service) \- \(.username)"' "$DATA_FILE" | nl | sed 's/^ *//; s/ /\\. /') # Format for MarkdownV2
+        output=$(jq -r '.accounts[] | "\(.service) - \(.username)"' "$DATA_FILE" | nl | sed 's/^ *//; s/ /\\. /') # Format for MarkdownV2
         echo -e "${COL_CYAN}--- Cuentas de Streaming ---${COL_RESET}" # Console header
         jq -r '.accounts[] | "\(.service) - \(.username)"' "$DATA_FILE" | nl # Console output
         echo "------------------------" # Console footer
