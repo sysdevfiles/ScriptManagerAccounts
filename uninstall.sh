@@ -9,6 +9,9 @@ if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
     exit 0
 fi
 
+echo "Removing 'menu' command link (/usr/local/bin/menu)..."
+sudo rm -f /usr/local/bin/menu
+
 echo "Removing configuration file (config.env)..."
 rm -f config.env
 
@@ -21,10 +24,12 @@ else
     echo "Keeping account data file (streaming_accounts.json)."
 fi
 
-echo "Removing script files (streaming_manager.sh, install.sh, .gitignore)..."
+echo "Removing script files (streaming_manager.sh, install.sh, .gitignore, vps_installer.sh)..." # Added vps_installer.sh just in case
 rm -f streaming_manager.sh
 rm -f install.sh
+rm -f uninstall.sh # This script will remove itself last if needed
 rm -f .gitignore
+rm -f vps_installer.sh # Remove installer if present in this dir
 rm -f streaming_accounts.tmp # Remove temporary file if it exists
 
 echo "Streaming Manager files removed."

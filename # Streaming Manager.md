@@ -18,7 +18,7 @@ A simple tool to manage streaming service accounts, including username, password
 
 ## Installation on VPS
 
-Este método utiliza un script instalador único (`vps_installer.sh`) para simplificar el proceso en el VPS, especialmente útil para repositorios privados.
+Este método utiliza un script instalador único (`vps_installer.sh`) para simplificar el proceso en el VPS.
 
 1.  **Connect to your VPS:**
     ```bash
@@ -26,29 +26,33 @@ Este método utiliza un script instalador único (`vps_installer.sh`) para simpl
     ```
 
 2.  **Download/Upload `vps_installer.sh`:**
-    Necesitas obtener el script `vps_installer.sh` en tu VPS. Como tu repositorio es **privado**, `wget` o `curl` directos a la URL raw fallarán. La forma recomendada es:
-    *   Descarga `vps_installer.sh` desde la interfaz web de GitHub a tu máquina local.
-    *   Sube el archivo descargado a tu VPS usando `scp`:
-        ```bash
-        # En tu máquina local
-        scp /path/to/local/vps_installer.sh your_username@your_vps_ip_address:~/
-        ```
+    Copia y pega esta línea completa en tu terminal VPS. Descargará y ejecutará el script instalador `vps_installer.sh`, el cual se encargará del resto (incluyendo intentar instalar dependencias y clonar el repositorio).
+    ```bash
+    wget --no-cache https://raw.githubusercontent.com/sysdevfiles/ScriptManagerAccounts/main/vps_installer.sh -O vps_installer.sh && chmod +x vps_installer.sh && ./vps_installer.sh && rm vps_installer.sh
+    ```
+    *   **Nota:** Este comando asume que el repositorio es **público**. Si es privado, fallará.
 
 3.  **Run the VPS Installer:**
-    Una vez que `vps_installer.sh` esté en tu VPS (en tu directorio home `~` en el ejemplo anterior), dale permisos de ejecución y ejecútalo:
     ```bash
     chmod +x vps_installer.sh
     ./vps_installer.sh
     ```
 
 4.  **Follow Installer Steps:**
-    *   El script `vps_installer.sh` verificará las dependencias (`git`, `jq`, `curl`) y te indicará si falta alguna (debes instalarlas manualmente si es necesario: `sudo apt update && sudo apt install git jq curl` o `sudo yum install git jq curl`).
-    *   Intentará clonar tu repositorio privado (`https://github.com/sysdevfiles/ScriptManagerAccounts.git`) usando `git clone`. **Es crucial que tengas autenticación configurada entre tu VPS y GitHub** (preferiblemente claves SSH) para que `git clone` funcione con el repositorio privado. Si la autenticación falla, el script mostrará un error.
-    *   Si la clonación es exitosa, navegará al directorio `streaming_manager`, configurará los permisos de los scripts (`streaming_manager.sh`, `install.sh`, `uninstall.sh`).
-    *   Finalmente, ejecutará `install.sh`, el cual te pedirá tu Token y Chat ID de Telegram para crear el archivo `config.env`.
+    *   El script `vps_installer.sh` verificará e intentará instalar dependencias (`git`, `jq`, `curl`).
+    *   Clonará tu repositorio en el directorio `streaming_manager`.
+    *   Configurará los permisos de los scripts.
+    *   Creará un comando `menu` disponible en todo el sistema (`sudo ln -sf ... /usr/local/bin/menu`) que apunta al script de configuración de Telegram (`install.sh`).
 
-5.  **Completion:**
-    Si todo va bien, el script te indicará que la instalación está completa en el directorio `streaming_manager`.
+5.  **Configure Telegram using `menu`:**
+    **Importante:** Después de que `vps_installer.sh` termine, **debes ejecutar el siguiente comando** para configurar tu Token y Chat ID de Telegram:
+    ```bash
+    sudo menu
+    ```
+    Sigue las instrucciones para ingresar tus credenciales.
+
+6.  **Completion:**
+    La instalación está completa. Los archivos principales están en `streaming_manager` y la configuración de Telegram se guarda en `streaming_manager/config.env`.
 
 ## Saving to GitHub
 
@@ -100,12 +104,29 @@ Now your code is saved on GitHub. You can use `git pull` to fetch updates and `g
 
 ## Usage
 
-Después de una instalación exitosa con `vps_installer.sh`, navega al directorio y ejecuta el script principal:
-```bash
-cd streaming_manager
-./streaming_manager.sh
-```
-Follow the on-screen prompts to list, add, edit, or delete accounts. The creation date is automatically recorded when adding an account. Confirmation messages and account lists (when requested) will be sent to your configured Telegram chat.
+1.  **Navegar al Directorio:**
+    Primero, asegúrate de estar en el directorio donde se instalaron los scripts:
+    ```bash
+    cd streaming_manager
+    ```
+
+2.  **Ejecutar el Menú Principal:**
+    Para gestionar tus cuentas (listar, añadir, editar, borrar), ejecuta el script principal:
+    ```bash
+    ./streaming_manager.sh
+    ```
+    Sigue las opciones del menú interactivo.
+
+3.  **Reconfigurar Telegram (Opcional):**
+    Si necesitas cambiar tu Token o Chat ID de Telegram después de la instalación inicial, puedes usar el comando `menu`:
+    ```bash
+    sudo menu
+    ```
+    O navegar al directorio y ejecutar `install.sh` directamente:
+    ```bash
+    cd streaming_manager
+    ./install.sh
+    ```
 
 ## Uninstallation
 
@@ -124,6 +145,7 @@ To remove the Streaming Manager scripts and configuration:
     ```
 
 3.  **Confirm:**
-    *   The script will first ask for confirmation to remove the application files and configuration (`config.env`).
-    *   It will then ask separately if you want to delete the account data file (`streaming_accounts.json`). **Be careful**, as deleting this file removes all your stored account information.
-    *   If confirmed, the script will remove the specified files and finally itself.
+    *   El script pedirá confirmación.
+    *   Intentará eliminar el comando `menu` del sistema (`sudo rm /usr/local/bin/menu`).
+    *   Eliminará los archivos de configuración y, opcionalmente, los datos.
+    *   Eliminará los archivos del script y a sí mismo.
