@@ -1,0 +1,25 @@
+{
+  "accounts": [
+    {
+      "service": "Netflix",
+      "username": "user1@example.com",
+      "password": "password1",
+      "plan": "Premium",
+      "renewal_date": "2024-06-15"
+    },
+    {
+      "service": "Hulu",
+      "username": "user2@example.com",
+      "password": "password2",
+      "plan": "No Ads",
+      "renewal_date": "2024-06-20"
+    },
+    {
+      "service": "Disney+",
+      "username": "user3@example.com",
+      "password": "password3",
+      "plan": "Standard",
+      "renewal_date": "2024-07-01"
+    }
+  ]
+}

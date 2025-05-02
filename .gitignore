@@ -1,0 +1,3 @@
+# Ignore configuration files containing sensitive credentials
+config.env
+streaming_accounts.tmp
