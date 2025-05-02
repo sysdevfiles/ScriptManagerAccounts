@@ -10,8 +10,8 @@ COL_RED='\033[0;31m'
 COL_BOLD='\033[1m'
 # --- End Colors ---
 
-# Determine the script's directory
-SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+# Determine the script's *real* directory, following symlinks
+SCRIPT_DIR=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")
 CONFIG_FILE="$SCRIPT_DIR/config.env" # Use absolute path
 
 echo -e "${COL_BOLD}${COL_CYAN}--- Configuración de Telegram para Streaming Manager ---${COL_RESET}" # Changed title
@@ -38,5 +38,6 @@ echo "TELEGRAM_CHAT_ID='${TELEGRAM_CHAT_ID}'" >> "$CONFIG_FILE"
 chmod 600 "$CONFIG_FILE"
 echo -e "${COL_GREEN}Permisos establecidos para $CONFIG_FILE (rw-------)${COL_RESET}" # Changed message
 echo
-echo -e "${COL_BOLD}${COL_GREEN}Configuración de Telegram completada.${COL_RESET}" # Changed message
-echo -e "Ahora puedes ejecutar ${COL_YELLOW}$SCRIPT_DIR/streaming_manager.sh${COL_RESET}" # Changed message
+echo -e "${COL_BOLD}${COL_GREEN}Bot Telegram instalado Correctamente.${COL_RESET}" # Changed final message
+echo -e "Ahora puedes gestionar tus cuentas ejecutando:"
+echo -e "${COL_YELLOW}cd $SCRIPT_DIR && ./streaming_manager.sh${COL_RESET}" # Correct usage instruction

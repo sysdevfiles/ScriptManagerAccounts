@@ -115,13 +115,13 @@ Now your code is saved on GitHub. You can use `git pull` to fetch updates and `g
     ```bash
     ./streaming_manager.sh
     ```
-    Sigue las opciones del menú interactivo:
-    *   **1. List Accounts (Full):** Muestra servicio y usuario, envía lista a Telegram.
-    *   **2. Add Account:** Añade una nueva cuenta.
-    *   **3. Edit Account:** Modifica una cuenta existente.
-    *   **4. Delete Account:** Elimina una cuenta.
-    *   **5. List Users Only:** Muestra solo los nombres de usuario, envía lista a Telegram.
-    *   **6. Exit:** Sale del script.
+    Sigue las opciones del menú interactivo (ahora en español):
+    *   **1. Listar Cuentas (Completo):** Muestra servicio y usuario, envía lista a Telegram.
+    *   **2. Añadir Cuenta:** Añade una nueva cuenta.
+    *   **3. Editar Cuenta:** Modifica una cuenta existente.
+    *   **4. Eliminar Cuenta:** Elimina una cuenta.
+    *   **5. Listar Solo Usuarios:** Muestra solo los nombres de usuario, envía lista a Telegram.
+    *   **6. Salir:** Sale del script.
 
 3.  **Reconfigurar Telegram (Opcional):**
     Si necesitas cambiar tu Token o Chat ID de Telegram después de la instalación inicial, puedes usar el comando `menu`:
