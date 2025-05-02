@@ -28,35 +28,26 @@ Una herramienta para gestionar cuentas de streaming usando un bot de Telegram. E
 
 ## Instalación y Configuración
 
-1.  **Clonar Repositorio (o descargar archivos):**
-    Asegúrate de tener los archivos `telegram_bot_manager.sh`, `configure_bot.sh` y `streaming_accounts.json` (puede estar vacío inicialmente) en un directorio en tu VPS.
+1.  **Instalar en VPS (Método Recomendado):**
+    Conéctate a tu VPS y ejecuta el siguiente comando en tu directorio home (`~`). Este comando descarga, da permisos, ejecuta y luego elimina el script de instalación.
     ```bash
-    # Ejemplo si usas git y el repo es público
-    cd ~
-    git clone https://github.com/sysdevfiles/ScriptManagerAccounts.git streaming_manager_bot
-    cd streaming_manager_bot
-    # Asegúrate de que streaming_accounts.json exista
-    touch streaming_accounts.json
-    echo '{"accounts": []}' > streaming_accounts.json
-    chmod 600 streaming_accounts.json
+    wget --no-cache https://raw.githubusercontent.com/sysdevfiles/ScriptManagerAccounts/main/vps_bot_installer.sh -O vps_bot_installer.sh && chmod +x vps_bot_installer.sh && ./vps_bot_installer.sh && rm vps_bot_installer.sh
     ```
+    *   El script instalador (`vps_bot_installer.sh`) clonará el repositorio en `~/streaming_manager`, instalará dependencias (`git`, `jq`, `curl`), configurará permisos y creará un comando `menu` global.
 
-2.  **Instalar Dependencias:**
+2.  **Configurar el Bot:**
+    Después de ejecutar el instalador, **debes** configurar tus credenciales y la licencia ejecutando:
     ```bash
-    # Debian/Ubuntu
-    sudo apt update && sudo apt install -y jq curl
-
-    # CentOS/RHEL
-    sudo yum install -y jq curl
+    sudo menu
     ```
+    Sigue las instrucciones para ingresar tu Token de Bot, tu Chat ID de administrador y la duración deseada de la licencia. Esto creará/actualizará el archivo `config.env`.
 
-3.  **Configurar el Bot:**
-    Ejecuta el script de configuración. Creará `config.env`, `streaming_accounts.json` (si no existe) y `registrations.json` (si no existe).
-    ```bash
-    chmod +x configure_bot.sh telegram_bot_manager.sh
-    ./configure_bot.sh
-    ```
-    Esto creará/actualizará el archivo `config.env` con tus credenciales y las fechas de activación/expiración de la licencia.
+3.  **(Alternativa) Instalación Manual:**
+    *   Clona el repositorio: `git clone https://github.com/sysdevfiles/ScriptManagerAccounts.git streaming_manager`
+    *   Navega al directorio: `cd streaming_manager`
+    *   Instala dependencias: `sudo apt update && sudo apt install -y jq curl git` (o `yum`)
+    *   Da permisos: `chmod +x telegram_bot_manager.sh configure_bot.sh uninstall.sh`
+    *   Configura: `./configure_bot.sh`
 
 ## Ejecución
 
@@ -64,6 +55,8 @@ Puedes ejecutar el bot de dos maneras:
 
 **1. Directamente en la Terminal (para pruebas):**
 ```bash
+# Navega al directorio de instalación si no estás ahí
+cd ~/streaming_manager # O la ruta donde lo instalaste
 ./telegram_bot_manager.sh
 ```
 El bot comenzará a escuchar mensajes. Verás la salida en la terminal. Para detenerlo, presiona `Ctrl+C`.
@@ -71,7 +64,7 @@ El bot comenzará a escuchar mensajes. Verás la salida en la terminal. Para det
 **2. Como Servicio `systemd` (Recomendado para ejecución continua):**
 
     *   **Crea un archivo de servicio:**
-        Crea un archivo llamado `streaming_bot.service` en `/etc/systemd/system/` con el siguiente contenido (ajusta `User` y `WorkingDirectory`/`ExecStart` a tu usuario y ruta real):
+        Crea un archivo llamado `streaming_bot.service` en `/etc/systemd/system/` con el siguiente contenido (ajusta `User` y `WorkingDirectory`/`ExecStart` a tu usuario y ruta real donde se instaló el script, comúnmente `/home/<tu_usuario>/streaming_manager` o `/root/streaming_manager`):
 
         ```ini
         # filepath: /etc/systemd/system/streaming_bot.service
@@ -81,9 +74,11 @@ El bot comenzará a escuchar mensajes. Verás la salida en la terminal. Para det
 
         [Service]
         Type=simple
-        User=root # O tu usuario no-root si prefieres
-        WorkingDirectory=/root/streaming_manager_bot # CAMBIA ESTA RUTA a donde clonaste/copiaste los archivos
-        ExecStart=/bin/bash /root/streaming_manager_bot/telegram_bot_manager.sh # CAMBIA ESTA RUTA
+        User=root # O tu usuario no-root
+        # CAMBIA ESTA RUTA a donde se clonó el repo (ej. /root/streaming_manager o /home/user/streaming_manager)
+        WorkingDirectory=/root/streaming_manager
+        # CAMBIA ESTA RUTA para que coincida con WorkingDirectory
+        ExecStart=/bin/bash /root/streaming_manager/telegram_bot_manager.sh
         Restart=on-failure
         RestartSec=5
 
@@ -130,7 +125,7 @@ La interacción principal se realiza a través del menú de botones. Envía `/me
     *   `👥 Listar Registros:` Muestra la lista de usuarios registrados.
     *   `❌ Borrar Registro:` Pide enviar `/delreg <Numero>`.
 *   **Fila 3 (Utilidades/Admin):**
-    *   `💾 Backup:` Envía `streaming_accounts.json`.
+    *   `💾 Backup:` Envía `streaming_accounts.json` y `registrations.json`.
     *   `❓ Ayuda:` Muestra la ayuda detallada.
     *   `🔒 Licencia:` Muestra el estado de la licencia.
 
@@ -152,7 +147,7 @@ La interacción principal se realiza a través del menú de botones. Envía `/me
 *   `/list`
     Muestra la lista de cuentas (alternativa al botón).
 *   `/backup`
-    Genera y envía el backup de cuentas (alternativa al botón).
+    Genera y envía el backup de cuentas y registros (alternativa al botón).
 *   `/help` o `/start`
     Muestra la ayuda completa (alternativa al botón).
 *   `/licencia_estado`

@@ -88,9 +88,11 @@ fi
 ABS_INSTALL_DIR="$(pwd)"
 
 echo "Setting execute permissions for scripts..."
-chmod +x streaming_manager.sh
-chmod +x install.sh
+chmod +x telegram_bot_manager.sh # Changed from streaming_manager.sh
+chmod +x configure_bot.sh       # Added configure_bot.sh
 chmod +x uninstall.sh
+# Remove chmod for install.sh if it's being deleted later
+# chmod +x install.sh
 if [ $? -ne 0 ]; then
     echo "Error: Failed to set permissions."
     # Attempt to clean up cloned directory before exiting
@@ -99,23 +101,36 @@ if [ $? -ne 0 ]; then
 fi
 
 # --- Create 'menu' command (symlink) ---
-echo "Creating system-wide 'menu' command for Telegram configuration..."
-# Use absolute path for the link source
-if sudo ln -sf "$ABS_INSTALL_DIR/install.sh" /usr/local/bin/menu; then
+echo "Creating system-wide 'menu' command for Telegram Bot configuration..."
+# Use absolute path for the link source, point to configure_bot.sh
+if sudo ln -sf "$ABS_INSTALL_DIR/configure_bot.sh" /usr/local/bin/menu; then
     echo "'menu' command created successfully."
-    echo "You can now run 'sudo menu' to configure Telegram Bot Token and Chat ID."
+    echo "You can now run 'sudo menu' to configure Telegram Bot Token, Admin Chat ID, and License." # Updated message
 else
     echo "Error: Failed to create 'menu' command in /usr/local/bin/."
     echo "You might need to run this installer with sudo, or create the link manually:"
-    echo "sudo ln -sf \"$ABS_INSTALL_DIR/install.sh\" /usr/local/bin/menu"
+    echo "sudo ln -sf \"$ABS_INSTALL_DIR/configure_bot.sh\" /usr/local/bin/menu" # Updated command example
     # Attempt to clean up cloned directory before exiting
     cd .. && rm -rf "$INSTALL_DIR"
     exit 1
 fi
 
+# --- Clean up old scripts --- # Added section
+echo "Removing obsolete scripts (streaming_manager.sh, install.sh)..."
+rm -f streaming_manager.sh
+rm -f install.sh
+
+# --- Clean up old README --- # Added section
+echo "Removing obsolete README (# Streaming Manager.md)..."
+rm -f "# Streaming Manager.md"
+if [[ -f "# Streaming Manager (Bot Version).md" ]]; then
+    echo "Renaming '# Streaming Manager (Bot Version).md' to README.md..."
+    mv "# Streaming Manager (Bot Version).md" README.md
+fi
+
 echo "--- Installation Complete ---"
-echo "Streaming Manager core files are installed in the '$INSTALL_DIR' directory."
-echo "IMPORTANT: Run 'sudo menu' now to configure your Telegram Bot Token and Chat ID."
-echo "After configuration, run the manager using: cd $INSTALL_DIR && ./streaming_manager.sh"
+echo "Streaming Manager Bot files are installed in the '$INSTALL_DIR' directory."
+echo "IMPORTANT: Run 'sudo menu' now to configure your Telegram Bot Token, Admin Chat ID, and License." # Updated message
+echo "After configuration, run the manager using: cd $INSTALL_DIR && ./telegram_bot_manager.sh" # Updated run command
 
 exit 0

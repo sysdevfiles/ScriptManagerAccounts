@@ -1,8 +1,8 @@
 #!/bin/bash
-# Uninstallation script for Streaming Manager
+# Uninstallation script for Streaming Manager Bot
 
-echo "--- Streaming Manager Uninstallation ---"
-read -p "Are you sure you want to remove Streaming Manager and its configuration? (y/N): " confirm
+echo "--- Streaming Manager Bot Uninstallation ---"
+read -p "Are you sure you want to remove Streaming Manager Bot and its configuration? (y/N): " confirm
 
 if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
     echo "Uninstallation cancelled."
@@ -15,24 +15,37 @@ sudo rm -f /usr/local/bin/menu
 echo "Removing configuration file (config.env)..."
 rm -f config.env
 
-read -p "Do you also want to remove the account data file (streaming_accounts.json)? This cannot be undone. (y/N): " confirm_data
+read -p "Do you also want to remove the data files (streaming_accounts.json, registrations.json, update_offset.txt)? This cannot be undone. (y/N): " confirm_data
 
 if [[ "$confirm_data" =~ ^[Yy]$ ]]; then
     echo "Removing account data file (streaming_accounts.json)..."
     rm -f streaming_accounts.json
+    echo "Removing registration data file (registrations.json)..."
+    rm -f registrations.json
+    echo "Removing update offset file (update_offset.txt)..."
+    rm -f update_offset.txt
 else
-    echo "Keeping account data file (streaming_accounts.json)."
+    echo "Keeping data files."
 fi
 
-echo "Removing script files (streaming_manager.sh, install.sh, .gitignore, vps_installer.sh)..." # Added vps_installer.sh just in case
+echo "Removing temporary files..."
+rm -f streaming_accounts.tmp
+rm -f registrations.tmp
+
+echo "Removing script files (telegram_bot_manager.sh, configure_bot.sh, vps_bot_installer.sh, README.md)..." # Updated list
+rm -f telegram_bot_manager.sh
+rm -f configure_bot.sh
+rm -f vps_bot_installer.sh # Changed from vps_installer.sh
+rm -f README.md
+rm -f .gitignore
+
+# Remove obsolete scripts just in case they weren't removed by installer
 rm -f streaming_manager.sh
 rm -f install.sh
-rm -f uninstall.sh # This script will remove itself last if needed
-rm -f .gitignore
-rm -f vps_installer.sh # Remove installer if present in this dir
-rm -f streaming_accounts.tmp # Remove temporary file if it exists
+rm -f "# Streaming Manager.md"
+rm -f "# Streaming Manager (Bot Version).md"
 
-echo "Streaming Manager files removed."
+echo "Streaming Manager Bot files removed."
 echo "Removing uninstall script (uninstall.sh)..."
 rm -- "$0" # Self-delete
 

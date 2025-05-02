@@ -346,13 +346,37 @@ handle_edit() {
 # Function to handle backup request
 handle_backup() {
     local chat_id="$1"
+    local backup_successful=false
+
     if [[ -f "$DATA_FILE" ]]; then
         sendMessage "$chat_id" "Generando y enviando backup de \`streaming_accounts.json\`\\.\\.\\."
         sendDocument "$chat_id" "$DATA_FILE" "Backup de cuentas al $(date '+%Y-%m-%d %H:%M:%S')"
-        echo -e "${COL_GREEN}Backup enviado al chat $chat_id.${COL_RESET}"
+        echo -e "${COL_GREEN}Backup de cuentas enviado al chat $chat_id.${COL_RESET}"
+        backup_successful=true
     else
         sendMessage "$chat_id" "Error: No se encontró el archivo de datos \`$DATA_FILE\` para hacer backup\\."
         echo -e "${COL_RED}Error de backup: $DATA_FILE no encontrado.${COL_RESET}"
+    fi
+
+    # Backup registrations file
+    if [[ -f "$REG_DATA_FILE" ]]; then
+        sendMessage "$chat_id" "Generando y enviando backup de \`registrations.json\`\\.\\.\\."
+        sendDocument "$chat_id" "$REG_DATA_FILE" "Backup de registros al $(date '+%Y-%m-%d %H:%M:%S')"
+        echo -e "${COL_GREEN}Backup de registros enviado al chat $chat_id.${COL_RESET}"
+        backup_successful=true
+    else
+        # Don't send error if file just doesn't exist yet, maybe send info message
+        if [[ -e "$REG_DATA_FILE" ]]; then # Check if it exists but isn't a file or readable
+             sendMessage "$chat_id" "Error: No se pudo acceder al archivo de datos \`$REG_DATA_FILE\` para hacer backup\\."
+             echo -e "${COL_RED}Error de backup: $REG_DATA_FILE no accesible.${COL_RESET}"
+        else
+             sendMessage "$chat_id" "Info: No se encontró archivo de registros \`$REG_DATA_FILE\` para backup \\(puede que aún no se haya usado la función de registro\\)\\."
+             echo -e "${COL_YELLOW}Info backup: $REG_DATA_FILE no encontrado.${COL_RESET}"
+        fi
+    fi
+
+    if ! $backup_successful; then
+         sendMessage "$chat_id" "No se pudo generar ningún backup\\. Comprueba los logs del servidor\\."
     fi
 }
 
@@ -483,13 +507,13 @@ handle_help() {
     help_text+="*   👥 Listar:* Muestra la lista de registros\\.\n"
     help_text+="*   ❌ Borrar:* Pide número \\> \`/delreg Numero\`\\.\n\n"
     help_text+="*Utilidades y Admin*\n"
-    help_text+="*   💾 Backup:* Envía el archivo de datos de cuentas\\.\n" # Clarify which backup
+    help_text+="*   💾 Backup:* Envía los archivos de datos \`streaming_accounts.json\` y \`registrations.json\`\\.\n" # Updated backup description
     help_text+="*   ❓ Ayuda:* Muestra esta ayuda\\.\n"
     help_text+="*   🔒 Licencia:* Muestra el estado de la licencia\\.\n\n"
     help_text+="*Comandos Adicionales (Texto)*\n"
     help_text+="\`/licencia_expira YYYY-MM-DD\` \\- Cambia la fecha de expiración\\.\n"
-    help_text+="\`/listreg\` \\- Alias para listar registros\\.\n" # Added alias
-    help_text+="\`/delreg Numero\` \\- Alias para borrar registro\\." # Added alias
+    help_text+="\`/listreg\` \\- Alias para listar registros\\.\n"
+    help_text+="\`/delreg Numero\` \\- Alias para borrar registro\\."
     sendMessage "$chat_id" "$help_text"
 }
 
@@ -504,12 +528,12 @@ handle_license_status() {
     status_msg+="Expiración: \`$EXPIRATION_DATE\`\n"
 
     if (( expiration_time_sec == 0 || activation_time_sec == 0 )); then
-         status_msg+="Estado: ${COL_RED}Error en formato de fechas${COL_RESET}\n"
+         status_msg+="Estado: ⚠️ *Error en formato de fechas*\n" # Removed color codes
     elif (( current_time_sec > expiration_time_sec )); then
-         status_msg+="Estado: 🔴 *Expirada*\n"
+         status_msg+="Estado: 🔴 *Expirada*\n" # Removed color codes
     else
          local days_left=$(((expiration_time_sec - current_time_sec) / 86400))
-         status_msg+="Estado: 🟢 *Activa* \\($days_left días restantes\\)\n"
+         status_msg+="Estado: 🟢 *Activa* \\($days_left días restantes\\)\n" # Removed color codes
     fi
     sendMessage "$chat_id" "$status_msg"
 }
