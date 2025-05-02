@@ -18,7 +18,7 @@ Una herramienta para gestionar cuentas de streaming y registros de usuarios usan
 
 *   `python3` (versión 3.7 o superior recomendada)
 *   `pip3` (gestor de paquetes de Python)
-*   Librerías Python listadas en `requirements.txt` (`python-telegram-bot`, `python-dotenv`)
+*   Librerías Python listadas en `requirements.txt` (`python-telegram-bot[job-queue]`, `python-dotenv`)
 *   `git`, `jq`, `curl` (para el instalador y scripts auxiliares)
 *   Un Bot de Telegram y su **Token**.
 *   Tu **Chat ID** de Telegram.
