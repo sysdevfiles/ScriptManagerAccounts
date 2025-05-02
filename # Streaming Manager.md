@@ -18,53 +18,42 @@ A simple tool to manage streaming service accounts, including username, password
 
 ## Installation on VPS
 
+Este método utiliza un script instalador único para simplificar el proceso en el VPS.
+
 1.  **Connect to your VPS:**
-    Use SSH to connect to your server:
     ```bash
     ssh your_username@your_vps_ip_address
     ```
 
-2.  **Install Dependencies Manually:**
-    This tool requires `jq` and `curl`. Install them using your VPS's package manager:
-    *   Debian/Ubuntu: `sudo apt update && sudo apt install jq curl git wget unzip`
-    *   CentOS/RHEL: `sudo yum install jq curl git wget unzip`
-    (You only need `git` or `wget`/`unzip` depending on the download method below).
-
-3.  **Get the Files:** Choose **one** of the following methods:
-
-    *   **Method A: Using `git clone` (Recommended)**
+2.  **Download the VPS Installer:**
+    Descarga el script `vps_installer.sh` desde el repositorio a tu VPS.
+    **Importante:** Como el repositorio es privado, necesitas una forma de descargar este *único* archivo.
+    *   **Opción A (Recomendada):** Si tienes acceso web a GitHub, descarga `vps_installer.sh` manualmente a tu máquina local y súbelo al VPS usando `scp`:
         ```bash
-        # On your VPS
-        git clone https://github.com/sysdevfiles/ScriptManagerAccounts.git streaming_manager
-        cd streaming_manager
+        # En tu máquina local, después de descargar vps_installer.sh
+        scp /path/to/local/vps_installer.sh your_username@your_vps_ip_address:~/
+        ```
+    *   **Opción B (Si haces el repo público temporalmente o usas un token):** Podrías usar `wget` o `curl` con autenticación, pero es más complejo y menos seguro para un script inicial. Si el repo fuera público, sería:
+        ```bash
+        # SOLO SI EL REPO ES PÚBLICO
+        # wget https://raw.githubusercontent.com/sysdevfiles/ScriptManagerAccounts/main/vps_installer.sh -O vps_installer.sh
         ```
 
-    *   **Method B: Using `wget` and `unzip`**
-        ```bash
-        # On your VPS
-        wget https://github.com/sysdevfiles/ScriptManagerAccounts/archive/refs/heads/main.zip -O ScriptManagerAccounts.zip
-        unzip ScriptManagerAccounts.zip
-        cd ScriptManagerAccounts-main
-        # Optional: Rename the directory
-        # cd .. && mv ScriptManagerAccounts-main streaming_manager && cd streaming_manager
-        ```
-
-4.  **Set Permissions Manually:**
-    Navigate into the project directory (`streaming_manager` or `ScriptManagerAccounts-main`) and make the main script executable:
+3.  **Run the VPS Installer:**
+    Una vez que tengas `vps_installer.sh` en tu VPS, dale permisos de ejecución y ejecútalo:
     ```bash
-    chmod +x streaming_manager.sh
+    chmod +x vps_installer.sh
+    ./vps_installer.sh
     ```
-    The data file (`streaming_accounts.json`) will be created with appropriate permissions by the main script on first run if needed, or you can create it manually (`touch streaming_accounts.json && chmod 600 streaming_accounts.json`).
 
-5.  **Configure Telegram:**
-    Run the `install.sh` script. This script **only** configures the Telegram settings by asking for your Bot Token and Chat ID and saving them to `config.env`.
-    ```bash
-    bash install.sh
-    ```
-    Have your Telegram Bot Token and Chat ID ready.
+4.  **Follow Installer Steps:**
+    *   El script verificará las dependencias (`git`, `jq`, `curl`) y te indicará si falta alguna.
+    *   Intentará clonar el repositorio `https://github.com/sysdevfiles/ScriptManagerAccounts.git`. **Necesitarás tener autenticación configurada entre tu VPS y GitHub** (preferiblemente claves SSH) para que esto funcione, ya que el repositorio es privado. Si falla, el script te dará un error indicando problemas de autenticación o acceso.
+    *   Si la clonación es exitosa, configurará los permisos de los scripts descargados.
+    *   Finalmente, ejecutará `install.sh`, que te pedirá tu Token y Chat ID de Telegram.
 
-6.  **Verify:**
-    After running `install.sh`, you should have a `config.env` file with the correct permissions.
+5.  **Completion:**
+    Si todo va bien, el script te indicará que la instalación está completa y dónde se encuentran los archivos (en el directorio `streaming_manager`).
 
 ## Saving to GitHub
 
@@ -116,8 +105,9 @@ Now your code is saved on GitHub. You can use `git pull` to fetch updates and `g
 
 ## Usage
 
-Ensure dependencies are installed and `streaming_manager.sh` is executable. Then run the main script:
+Después de una instalación exitosa con `vps_installer.sh`, navega al directorio y ejecuta el script principal:
 ```bash
+cd streaming_manager
 ./streaming_manager.sh
 ```
 Follow the on-screen prompts to list, add, edit, or delete accounts. The creation date is automatically recorded when adding an account. Confirmation messages and account lists (when requested) will be sent to your configured Telegram chat.
@@ -127,15 +117,14 @@ Follow the on-screen prompts to list, add, edit, or delete accounts. The creatio
 To remove the Streaming Manager scripts and configuration:
 
 1.  **Navigate to Directory:**
-    Make sure you are in the directory where the scripts are located (e.g., `~/streaming_manager`).
+    Make sure you are in the directory where the scripts are located (e.g., `~/streaming_manager` or `~/ScriptManagerAccounts-main`).
     ```bash
-    cd ~/streaming_manager
+    cd ~/streaming_manager # O el directorio donde se instaló
     ```
 
 2.  **Run Uninstall Script:**
-    Execute the `uninstall.sh` script. You might need to make it executable first if you haven't already or if permissions were reset.
+    Execute the `uninstall.sh` script (it should already be executable if you used the `wget` method above).
     ```bash
-    chmod +x uninstall.sh # Ensure it's executable
     ./uninstall.sh
     ```
 

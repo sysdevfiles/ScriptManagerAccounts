@@ -5,14 +5,36 @@ DATA_FILE="streaming_accounts.json"
 TMP_FILE="streaming_accounts.tmp"
 CONFIG_FILE="config.env"
 
-# Load configuration
+# --- Dependency Checks ---
+if ! command -v jq &> /dev/null; then
+    echo "Error: 'jq' command not found. Please install jq (e.g., sudo apt install jq)."
+    exit 1
+fi
+if ! command -v curl &> /dev/null; then
+    echo "Error: 'curl' command not found. Please install curl (e.g., sudo apt install curl)."
+    exit 1
+fi
+# --- End Dependency Checks ---
+
+# --- Load Configuration ---
 if [[ -f "$CONFIG_FILE" ]]; then
     source "$CONFIG_FILE"
 else
     echo "Error: Configuration file ($CONFIG_FILE) not found."
-    echo "Please run the install script again."
+    echo "Please run the install script (bash install.sh) to configure Telegram."
     exit 1
 fi
+# --- End Load Configuration ---
+
+# --- Ensure Data File Exists ---
+if [[ ! -f "$DATA_FILE" ]]; then
+    echo "Data file ($DATA_FILE) not found. Creating it..."
+    echo '{"accounts": []}' > "$DATA_FILE"
+    chmod 600 "$DATA_FILE" # Set permissions (rw-------)
+    echo "Data file created successfully."
+fi
+# --- End Ensure Data File Exists ---
+
 
 # Function to send message to Telegram
 send_telegram_message() {
@@ -31,6 +53,13 @@ send_telegram_message() {
 list_accounts() {
     echo "--- Streaming Accounts ---"
     local output
+    # Check if the file is valid JSON and has accounts array before proceeding
+    if ! jq -e '.accounts' "$DATA_FILE" > /dev/null 2>&1; then
+        echo "Error: Data file ($DATA_FILE) is not valid JSON or is missing the 'accounts' array."
+        echo "Please check or recreate the file with content: {\"accounts\": []}"
+        return 1 # Indicate error
+    fi
+
     if ! jq '.accounts | length' "$DATA_FILE" > /dev/null 2>&1 || [[ $(jq '.accounts | length' "$DATA_FILE") -eq 0 ]]; then
         output="No accounts found."
         echo "$output"
