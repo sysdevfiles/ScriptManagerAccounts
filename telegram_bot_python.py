@@ -137,11 +137,12 @@ def format_registrations_list(reg_data):
         return "No se encontraron registros de usuarios\\."
     output = "--- Registros de Usuarios ---\n```\n"
     for i, reg in enumerate(reg_data["registrations"]):
-        name = reg.get('name', 'N/A')
-        platform = reg.get('platform', 'N/A')
-        end_date = reg.get('end_date', 'N/A')
-        # Escape potential markdown characters if needed
-        output += f"{i + 1}. {name} ({platform}) - Vence: {end_date}\n"
+        # Escape user-provided data before including it
+        name = escape_markdown(reg.get('name', 'N/A'), version=2)
+        platform = escape_markdown(reg.get('platform', 'N/A'), version=2)
+        end_date = escape_markdown(reg.get('end_date', 'N/A'), version=2)
+        # Escape the literal '(' and ')' just in case, although ``` should handle it
+        output += f"{i + 1}. {name} \\({platform}\\) - Vence: {end_date}\n"
     output += "```"
     return output
 
@@ -682,16 +683,17 @@ async def ask_delete_account_confirm(update: Update, context: ContextTypes.DEFAU
         if 0 <= index < len(accounts):
             context.user_data['delete_index'] = index
             account = accounts[index]
-            service = escape_markdown(account.get('service', 'N/A'), version=2)
-            username = escape_markdown(account.get('username', 'N/A'), version=2)
+            # Escape user data before displaying
+            service_escaped = escape_markdown(account.get('service', 'N/A'), version=2)
+            username_escaped = escape_markdown(account.get('username', 'N/A'), version=2)
             keyboard = [[InlineKeyboardButton("✔️ Sí, eliminar", callback_data='confirm_delete_yes'),
                          InlineKeyboardButton("✖️ No, cancelar", callback_data='confirm_delete_no')]]
             reply_markup = InlineKeyboardMarkup(keyboard)
             await update.message.reply_text(
                 f"❓ *Confirmación de Eliminación*\n\n"
                 f"¿Estás seguro de que quieres eliminar la cuenta #{index + 1}?\n\n"
-                f"🌐 Servicio: *{service}*\n"
-                f"📧 Usuario: `{username}`\n\n"
+                f"🌐 Servicio: *{service_escaped}*\n" # Use escaped variable
+                f"📧 Usuario: `{username_escaped}`\n\n" # Use escaped variable
                 f"⚠️ *Esta acción no se puede deshacer\\.*",
                 reply_markup=reply_markup,
                 parse_mode='MarkdownV2'
@@ -717,13 +719,14 @@ async def process_delete_account_confirm(update: Update, context: ContextTypes.D
     if decision == 'confirm_delete_yes' and 'delete_index' in context.user_data:
         index_to_delete = context.user_data['delete_index']
         accounts_data = load_data(DATA_FILE)
-        accounts = accounts.get("accounts", [])
+        accounts = accounts_data.get("accounts", [])
 
         if 0 <= index_to_delete < len(accounts):
             deleted_account = accounts.pop(index_to_delete)
             if save_data(DATA_FILE, accounts_data):
-                service = escape_markdown(deleted_account.get('service', 'N/A'), version=2)
-                await query.edit_message_text(f"✅ Cuenta #{index_to_delete + 1} (*{service}*) eliminada exitosamente\\.", parse_mode='MarkdownV2')
+                # Escape user data before displaying
+                service_escaped = escape_markdown(deleted_account.get('service', 'N/A'), version=2)
+                await query.edit_message_text(f"✅ Cuenta #{index_to_delete + 1} (*{service_escaped}*) eliminada exitosamente\\.", parse_mode='MarkdownV2') # Use escaped variable
             else:
                 await query.edit_message_text("❌ Error Crítico: No se pudo guardar los cambios después de eliminar la cuenta\\.", parse_mode='MarkdownV2')
         else:
@@ -738,7 +741,6 @@ async def process_delete_account_confirm(update: Update, context: ContextTypes.D
         del context.user_data['delete_index']
     await send_main_menu(chat_id, context)
     return ConversationHandler.END
-
 
 # --- Edit Account Conversation ---
 EDIT_ACCOUNT_NUMBER, EDIT_ACCOUNT_FIELD, EDIT_ACCOUNT_VALUE = range(17, 20)
@@ -772,7 +774,8 @@ async def ask_edit_account_field(update: Update, context: ContextTypes.DEFAULT_T
         if 0 <= index < len(accounts):
             context.user_data['edit_index'] = index
             account = accounts[index]
-            service = escape_markdown(account.get('service', 'N/A'), version=2)
+            # Escape user data before displaying
+            service_escaped = escape_markdown(account.get('service', 'N/A'), version=2)
 
             # Create buttons for valid fields with emojis
             field_emojis = {
@@ -787,7 +790,7 @@ async def ask_edit_account_field(update: Update, context: ContextTypes.DEFAULT_T
             reply_markup = InlineKeyboardMarkup(buttons)
 
             await update.message.reply_text(
-                f"✏️ Editando cuenta #{index + 1} (*{service}*)\\.\n\n"
+                f"✏️ Editando cuenta #{index + 1} (*{service_escaped}*)\\.\n\n" # Use escaped variable
                 f"Selecciona el campo que deseas modificar:",
                 reply_markup=reply_markup,
                 parse_mode='MarkdownV2'
@@ -824,14 +827,18 @@ async def ask_edit_account_value(update: Update, context: ContextTypes.DEFAULT_T
 
     field_to_edit = field_choice.split('edit_field_')[1]
     if field_to_edit not in VALID_EDIT_FIELDS:
-        await query.edit_message_text(f"❌ Campo '{escape_markdown(field_to_edit, version=2)}' no es válido para edición\\. Cancelando\\.", parse_mode='MarkdownV2')
+        # Escape field name before showing error
+        field_to_edit_escaped = escape_markdown(field_to_edit, version=2)
+        await query.edit_message_text(f"❌ Campo '{field_to_edit_escaped}' no es válido para edición\\. Cancelando\\.", parse_mode='MarkdownV2')
         if 'edit_index' in context.user_data: del context.user_data['edit_index']
         await send_main_menu(chat_id, context)
         return ConversationHandler.END
 
     context.user_data['edit_field'] = field_to_edit
     field_display = field_to_edit.replace('_', ' ').capitalize()
-    await query.edit_message_text(f"✍️ Ingresa el nuevo valor para *{escape_markdown(field_display, version=2)}*:", parse_mode='MarkdownV2')
+    # Escape display name before asking for value
+    field_display_escaped = escape_markdown(field_display, version=2)
+    await query.edit_message_text(f"✍️ Ingresa el nuevo valor para *{field_display_escaped}*:", parse_mode='MarkdownV2')
     return EDIT_ACCOUNT_VALUE
 
 async def save_edit_account(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -911,16 +918,17 @@ async def ask_delete_reg_confirm(update: Update, context: ContextTypes.DEFAULT_T
         if 0 <= index < len(registrations):
             context.user_data['delete_reg_index'] = index
             reg = registrations[index]
-            name = escape_markdown(reg.get('name', 'N/A'), version=2)
-            platform = escape_markdown(reg.get('platform', 'N/A'), version=2)
+            # Escape user data before displaying
+            name_escaped = escape_markdown(reg.get('name', 'N/A'), version=2)
+            platform_escaped = escape_markdown(reg.get('platform', 'N/A'), version=2)
             keyboard = [[InlineKeyboardButton("✔️ Sí, eliminar", callback_data='confirm_delreg_yes'),
                          InlineKeyboardButton("✖️ No, cancelar", callback_data='confirm_delreg_no')]]
             reply_markup = InlineKeyboardMarkup(keyboard)
             await update.message.reply_text(
                 f"❓ *Confirmación de Eliminación de Registro*\n\n"
                 f"¿Estás seguro de que quieres eliminar el registro #{index + 1}?\n\n"
-                f"👤 Usuario: *{name}*\n"
-                f"📺 Plataforma: *{platform}*\n\n"
+                f"👤 Usuario: *{name_escaped}*\n" # Use escaped variable
+                f"📺 Plataforma: *{platform_escaped}*\n\n" # Use escaped variable
                 f"⚠️ *Esta acción no se puede deshacer\\.*",
                 reply_markup=reply_markup,
                 parse_mode='MarkdownV2'
@@ -952,9 +960,10 @@ async def process_delete_reg_confirm(update: Update, context: ContextTypes.DEFAU
         if 0 <= index_to_delete < len(registrations):
             deleted_reg = registrations.pop(index_to_delete)
             if save_data(REG_DATA_FILE, reg_data):
-                name = escape_markdown(deleted_reg.get('name', 'N/A'), version=2)
-                platform = escape_markdown(deleted_reg.get('platform', 'N/A'), version=2)
-                await query.edit_message_text(f"✅ Registro #{index_to_delete + 1} (*{name}* \\- *{platform}*) eliminado exitosamente\\.", parse_mode='MarkdownV2')
+                # Escape user data before displaying
+                name_escaped = escape_markdown(deleted_reg.get('name', 'N/A'), version=2)
+                platform_escaped = escape_markdown(deleted_reg.get('platform', 'N/A'), version=2)
+                await query.edit_message_text(f"✅ Registro #{index_to_delete + 1} (*{name_escaped}* \\- *{platform_escaped}*) eliminado exitosamente\\.", parse_mode='MarkdownV2') # Use escaped variables
             else:
                 await query.edit_message_text("❌ Error Crítico: No se pudieron guardar los cambios después de eliminar el registro\\.", parse_mode='MarkdownV2')
         else:
@@ -1004,34 +1013,46 @@ async def backup_data_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     # Backup accounts
     if os.path.exists(DATA_FILE):
         try:
+            # Escape filename for caption
+            filename_escaped = escape_markdown(os.path.basename(DATA_FILE), version=2)
             await context.bot.send_document(
                 chat_id=chat_id,
                 document=InputFile(DATA_FILE),
-                caption=f"Backup de cuentas al {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+                caption=f"Backup de cuentas \\({filename_escaped}\\) al {escape_markdown(datetime.now().strftime('%Y-%m-%d %H:%M:%S'), version=2)}" # Escape filename and date
             )
             logger.info(f"Backup de cuentas enviado a {chat_id}")
             backup_successful = True
         except Exception as e:
             logger.error(f"Error enviando backup de cuentas: {e}")
-            await context.bot.send_message(chat_id, f"Error al enviar backup de `{os.path.basename(DATA_FILE)}`\\.", parse_mode='MarkdownV2')
+            # Escape filename in error message
+            filename_escaped = escape_markdown(os.path.basename(DATA_FILE), version=2)
+            await context.bot.send_message(chat_id, f"Error al enviar backup de `{filename_escaped}`\\.", parse_mode='MarkdownV2')
     else:
-        await context.bot.send_message(chat_id, f"Info: No se encontró archivo `{os.path.basename(DATA_FILE)}` para backup\\.", parse_mode='MarkdownV2')
+        # Escape filename in info message
+        filename_escaped = escape_markdown(os.path.basename(DATA_FILE), version=2)
+        await context.bot.send_message(chat_id, f"Info: No se encontró archivo `{filename_escaped}` para backup\\.", parse_mode='MarkdownV2')
 
     # Backup registrations
     if os.path.exists(REG_DATA_FILE):
          try:
+            # Escape filename for caption
+            filename_escaped = escape_markdown(os.path.basename(REG_DATA_FILE), version=2)
             await context.bot.send_document(
                 chat_id=chat_id,
                 document=InputFile(REG_DATA_FILE),
-                caption=f"Backup de registros al {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+                caption=f"Backup de registros \\({filename_escaped}\\) al {escape_markdown(datetime.now().strftime('%Y-%m-%d %H:%M:%S'), version=2)}" # Escape filename and date
             )
             logger.info(f"Backup de registros enviado a {chat_id}")
             backup_successful = True
          except Exception as e:
             logger.error(f"Error enviando backup de registros: {e}")
-            await context.bot.send_message(chat_id, f"Error al enviar backup de `{os.path.basename(REG_DATA_FILE)}`\\.", parse_mode='MarkdownV2')
+            # Escape filename in error message
+            filename_escaped = escape_markdown(os.path.basename(REG_DATA_FILE), version=2)
+            await context.bot.send_message(chat_id, f"Error al enviar backup de `{filename_escaped}`\\.", parse_mode='MarkdownV2')
     else:
-        await context.bot.send_message(chat_id, f"Info: No se encontró archivo `{os.path.basename(REG_DATA_FILE)}` para backup\\.", parse_mode='MarkdownV2')
+        # Escape filename in info message
+        filename_escaped = escape_markdown(os.path.basename(REG_DATA_FILE), version=2)
+        await context.bot.send_message(chat_id, f"Info: No se encontró archivo `{filename_escaped}` para backup\\.", parse_mode='MarkdownV2')
 
     if not backup_successful:
          await context.bot.send_message(chat_id, "No se pudo generar ningún backup\\. Comprueba los logs\\.", parse_mode='MarkdownV2')
@@ -1045,9 +1066,12 @@ async def license_status_callback(update: Update, context: ContextTypes.DEFAULT_
     """Handles the 'License Status' button."""
     query = update.callback_query
     chat_id = query.message.chat.id
+    # Escape dates from config
+    activation_escaped = escape_markdown(str(ACTIVATION_DATE), version=2)
+    expiration_escaped = escape_markdown(str(EXPIRATION_DATE), version=2)
     status_msg = "*Estado de Licencia*\n"
-    status_msg += f"Activación: `{escape_markdown(ACTIVATION_DATE, version=2)}`\n"
-    status_msg += f"Expiración: `{escape_markdown(EXPIRATION_DATE, version=2)}`\n"
+    status_msg += f"Activación: `{activation_escaped}`\n"
+    status_msg += f"Expiración: `{expiration_escaped}`\n"
 
     try:
         expiration_dt = datetime.strptime(EXPIRATION_DATE, '%Y-%m-%d')
@@ -1056,8 +1080,11 @@ async def license_status_callback(update: Update, context: ContextTypes.DEFAULT_
             status_msg += "Estado: 🔴 *Expirada*\n"
         else:
             days_left = (expiration_dt - datetime.now()).days
-            status_msg += f"Estado: 🟢 *Activa* \\({days_left} días restantes\\)\n"
+            # Escape days_left just in case, and ensure '(' ')' are escaped
+            days_left_escaped = escape_markdown(str(days_left), version=2)
+            status_msg += f"Estado: 🟢 *Activa* \\({days_left_escaped} días restantes\\)\n"
     except (ValueError, TypeError):
+        # Ensure '(' ')' are escaped in error message
         status_msg += "Estado: ⚠️ *Error en formato de fechas* \\(YYYY\\-MM\\-DD esperado\\)\n"
 
     await query.edit_message_text(status_msg, parse_mode='MarkdownV2')
@@ -1102,11 +1129,12 @@ async def check_license(context: ContextTypes.DEFAULT_TYPE):
     """Periodically checks the license validity."""
     try:
         expiration_dt = datetime.strptime(EXPIRATION_DATE, '%Y-%m-%d')
+        expiration_escaped = escape_markdown(EXPIRATION_DATE, version=2) # Escape date for messages
         if datetime.now() > expiration_dt:
             logger.critical(f"License expired on {EXPIRATION_DATE}. Stopping bot.")
             await context.bot.send_message(
                 chat_id=ADMIN_CHAT_ID,
-                text=f"Error Crítico: La licencia del bot expiró el {EXPIRATION_DATE}\\. El bot se ha detenido\\.",
+                text=f"Error Crítico: La licencia del bot expiró el {expiration_escaped}\\. El bot se ha detenido\\.", # Use escaped date
                 parse_mode='MarkdownV2'
             )
             # Gracefully stop the application
@@ -1119,13 +1147,16 @@ async def check_license(context: ContextTypes.DEFAULT_TYPE):
                  logger.warning(f"License expires in {days_left} days ({EXPIRATION_DATE}).")
                  # Consider sending a Telegram warning less frequently
                  # if context.job.name == "license_check_daily_warn": # Example check
-                 #    await context.bot.send_message(ADMIN_CHAT_ID, f"Advertencia: La licencia expira en {days_left} días ({EXPIRATION_DATE}).")
+                 #    days_left_escaped = escape_markdown(str(days_left), version=2)
+                 #    await context.bot.send_message(ADMIN_CHAT_ID, f"Advertencia: La licencia expira en {days_left_escaped} días \\({expiration_escaped}\\)\\.", parse_mode='MarkdownV2')
 
     except (ValueError, TypeError) as e:
         logger.error(f"Invalid date format in config.env for EXPIRATION_DATE: {EXPIRATION_DATE}. Error: {e}")
+        # Escape date in error message
+        expiration_escaped = escape_markdown(str(EXPIRATION_DATE), version=2)
         await context.bot.send_message(
             chat_id=ADMIN_CHAT_ID,
-            text=f"Error Crítico: Formato de fecha de expiración inválido en config\\.env \\('{EXPIRATION_DATE}'\\)\\. El bot se detendrá\\.",
+            text=f"Error Crítico: Formato de fecha de expiración inválido en config\\.env \\('{expiration_escaped}'\\)\\. El bot se detendrá\\.", # Use escaped date
             parse_mode='MarkdownV2'
         )
         context.application.stop()
