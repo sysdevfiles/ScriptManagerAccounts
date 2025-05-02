@@ -1,9 +1,12 @@
 #!/bin/bash
 # Main script for Streaming Manager
 
-DATA_FILE="streaming_accounts.json"
-TMP_FILE="streaming_accounts.tmp"
-CONFIG_FILE="config.env"
+# Determine the script's directory
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+
+DATA_FILE="$SCRIPT_DIR/streaming_accounts.json" # Use absolute path
+TMP_FILE="$SCRIPT_DIR/streaming_accounts.tmp" # Use absolute path
+CONFIG_FILE="$SCRIPT_DIR/config.env"          # Use absolute path
 
 # --- Dependency Checks ---
 if ! command -v jq &> /dev/null; then
@@ -76,6 +79,35 @@ list_accounts() {
     # If there was a simple message (like "No accounts found"), send it
     [[ -n "$output" ]] && send_telegram_message "$output"
     echo "------------------------"
+}
+
+# Function to list only usernames
+list_users() {
+    echo "--- Streaming Usernames ---"
+    local output
+    # Check if the file is valid JSON and has accounts array before proceeding
+    if ! jq -e '.accounts' "$DATA_FILE" > /dev/null 2>&1; then
+        echo "Error: Data file ($DATA_FILE) is not valid JSON or is missing the 'accounts' array."
+        echo "Please check or recreate the file with content: {\"accounts\": []}"
+        return 1 # Indicate error
+    fi
+
+    if ! jq '.accounts | length' "$DATA_FILE" > /dev/null 2>&1 || [[ $(jq '.accounts | length' "$DATA_FILE") -eq 0 ]]; then
+        output="No accounts found."
+        echo "$output"
+    else
+        # Prepare output for both console and Telegram
+        output=$(jq -r '.accounts[] | .username' "$DATA_FILE" | nl | sed 's/^ *//; s/ /\\. /') # Format for MarkdownV2
+        echo "--- Streaming Usernames ---" # Console header
+        jq -r '.accounts[] | .username' "$DATA_FILE" | nl # Console output
+        echo "-------------------------" # Console footer
+        # Send formatted list to Telegram
+        send_telegram_message "--- Streaming Usernames ---\n\`\`\`\n${output}\n\`\`\`"
+        output="" # Clear output var as it was sent
+    fi
+    # If there was a simple message (like "No accounts found"), send it
+    [[ -n "$output" ]] && send_telegram_message "$output"
+    echo "-------------------------"
 }
 
 # Function to add an account
@@ -187,11 +219,12 @@ delete_account() {
 # Main menu
 while true; do
     echo "--- Streaming Manager Menu ---"
-    echo "1. List Accounts"
+    echo "1. List Accounts (Full)" # Clarified label
     echo "2. Add Account"
     echo "3. Edit Account"
     echo "4. Delete Account"
-    echo "5. Exit"
+    echo "5. List Users Only" # New option
+    echo "6. Exit"            # Updated exit number
     read -p "Choose an option: " choice
 
     case $choice in
@@ -199,7 +232,8 @@ while true; do
         2) add_account ;;
         3) edit_account ;;
         4) delete_account ;;
-        5) echo "Exiting."; send_telegram_message "Streaming Manager script stopped\\."; break ;; # Notify on exit
+        5) list_users ;;       # Call new function
+        6) echo "Exiting."; send_telegram_message "Streaming Manager script stopped\\."; break ;; # Updated exit number
         *) echo "Invalid option. Please try again." ;;
     esac
     read -p "Press Enter to continue..." # Pause for user
