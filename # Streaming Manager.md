@@ -18,42 +18,37 @@ A simple tool to manage streaming service accounts, including username, password
 
 ## Installation on VPS
 
-Este método utiliza un script instalador único para simplificar el proceso en el VPS.
+Este método utiliza un script instalador único (`vps_installer.sh`) para simplificar el proceso en el VPS, especialmente útil para repositorios privados.
 
 1.  **Connect to your VPS:**
     ```bash
     ssh your_username@your_vps_ip_address
     ```
 
-2.  **Download the VPS Installer:**
-    Descarga el script `vps_installer.sh` desde el repositorio a tu VPS.
-    **Importante:** Como el repositorio es privado, necesitas una forma de descargar este *único* archivo.
-    *   **Opción A (Recomendada):** Si tienes acceso web a GitHub, descarga `vps_installer.sh` manualmente a tu máquina local y súbelo al VPS usando `scp`:
+2.  **Download/Upload `vps_installer.sh`:**
+    Necesitas obtener el script `vps_installer.sh` en tu VPS. Como tu repositorio es **privado**, `wget` o `curl` directos a la URL raw fallarán. La forma recomendada es:
+    *   Descarga `vps_installer.sh` desde la interfaz web de GitHub a tu máquina local.
+    *   Sube el archivo descargado a tu VPS usando `scp`:
         ```bash
-        # En tu máquina local, después de descargar vps_installer.sh
+        # En tu máquina local
         scp /path/to/local/vps_installer.sh your_username@your_vps_ip_address:~/
-        ```
-    *   **Opción B (Si haces el repo público temporalmente o usas un token):** Podrías usar `wget` o `curl` con autenticación, pero es más complejo y menos seguro para un script inicial. Si el repo fuera público, sería:
-        ```bash
-        # SOLO SI EL REPO ES PÚBLICO
-        # wget https://raw.githubusercontent.com/sysdevfiles/ScriptManagerAccounts/main/vps_installer.sh -O vps_installer.sh
         ```
 
 3.  **Run the VPS Installer:**
-    Una vez que tengas `vps_installer.sh` en tu VPS, dale permisos de ejecución y ejecútalo:
+    Una vez que `vps_installer.sh` esté en tu VPS (en tu directorio home `~` en el ejemplo anterior), dale permisos de ejecución y ejecútalo:
     ```bash
     chmod +x vps_installer.sh
     ./vps_installer.sh
     ```
 
 4.  **Follow Installer Steps:**
-    *   El script verificará las dependencias (`git`, `jq`, `curl`) y te indicará si falta alguna.
-    *   Intentará clonar el repositorio `https://github.com/sysdevfiles/ScriptManagerAccounts.git`. **Necesitarás tener autenticación configurada entre tu VPS y GitHub** (preferiblemente claves SSH) para que esto funcione, ya que el repositorio es privado. Si falla, el script te dará un error indicando problemas de autenticación o acceso.
-    *   Si la clonación es exitosa, configurará los permisos de los scripts descargados.
-    *   Finalmente, ejecutará `install.sh`, que te pedirá tu Token y Chat ID de Telegram.
+    *   El script `vps_installer.sh` verificará las dependencias (`git`, `jq`, `curl`) y te indicará si falta alguna (debes instalarlas manualmente si es necesario: `sudo apt update && sudo apt install git jq curl` o `sudo yum install git jq curl`).
+    *   Intentará clonar tu repositorio privado (`https://github.com/sysdevfiles/ScriptManagerAccounts.git`) usando `git clone`. **Es crucial que tengas autenticación configurada entre tu VPS y GitHub** (preferiblemente claves SSH) para que `git clone` funcione con el repositorio privado. Si la autenticación falla, el script mostrará un error.
+    *   Si la clonación es exitosa, navegará al directorio `streaming_manager`, configurará los permisos de los scripts (`streaming_manager.sh`, `install.sh`, `uninstall.sh`).
+    *   Finalmente, ejecutará `install.sh`, el cual te pedirá tu Token y Chat ID de Telegram para crear el archivo `config.env`.
 
 5.  **Completion:**
-    Si todo va bien, el script te indicará que la instalación está completa y dónde se encuentran los archivos (en el directorio `streaming_manager`).
+    Si todo va bien, el script te indicará que la instalación está completa en el directorio `streaming_manager`.
 
 ## Saving to GitHub
 
