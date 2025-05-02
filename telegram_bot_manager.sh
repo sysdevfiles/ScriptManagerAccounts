@@ -647,7 +647,8 @@ while true; do
 
                 # Registration Callbacks
                 "register_user_prompt") # New
-                    sendMessage "$callback_chat_id" "Para registrar un usuario, envía el comando con *todos* los campos separados por punto y coma \\';':\n\`/register Plataforma;Nombre;Celular;TipoPago;Email;PIN;FechaAlta;FechaVenc\`\n*(Ej: /register Netflix;Juan Perez;12345;Paypal;jp@mail.com;1234;2024-01-01;2025-01-01)*"
+                    # Escape parentheses \( and \) for MarkdownV2 and shell safety
+                    sendMessage "$callback_chat_id" "Para registrar un usuario, envía el comando con *todos* los campos separados por punto y coma \\';':\n\`/register Plataforma;Nombre;Celular;TipoPago;Email;PIN;FechaAlta;FechaVenc\`\n*\\(Ej: /register Netflix;Juan Perez;12345;Paypal;jp@mail.com;1234;2024-01-01;2025-01-01\\)*"
                     ;;
                 "list_regs") # New
                     handle_list_registrations "$callback_chat_id"
