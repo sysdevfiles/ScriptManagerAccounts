@@ -1147,6 +1147,7 @@ reg_conv_handler = ConversationHandler(
         END_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_end_date)],
     },
     fallbacks=[CommandHandler('cancel', cancel_command)],
+    per_message=False # Explicitly set
     # Optional: Add conversation timeout
     # conversation_timeout=timedelta(minutes=5).total_seconds()
 )
@@ -1163,6 +1164,7 @@ add_account_conv_handler = ConversationHandler(
         ADD_PIN: [MessageHandler(filters.TEXT & ~filters.COMMAND, save_add_account)],
     },
     fallbacks=[CommandHandler('cancel', cancel_command)],
+    per_message=False # Explicitly set
 )
 
 # View Account Conversation Handler
@@ -1172,14 +1174,111 @@ view_account_conv_handler = ConversationHandler(
         VIEW_ACCOUNT_NUMBER: [MessageHandler(filters.TEXT & ~filters.COMMAND, process_view_account_number)],
     },
     fallbacks=[CommandHandler('cancel', cancel_command)],
+    per_message=False # Explicitly set
 )
 
 # Delete Account Conversation Handler
 delete_account_conv_handler = ConversationHandler(
-        entry_points=[CallbackQueryHandler(delete_account_start, pattern='^delete_account_prompt$')],
-        states={
-            DELETE_ACCOUNT_NUMBER: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_delete_account_confirm)],
-            DELETE_ACCOUNT_CONFIRM: [CallbackQueryHandler(process_delete_account_confirm, pattern='^confirm_delete_(yes|no)$')],
-        },
-        fallbacks=[CommandHandler('cancel', cancel_command)],
-    )
+    entry_points=[CallbackQueryHandler(delete_account_start, pattern='^delete_account_prompt$')],
+    states={
+        DELETE_ACCOUNT_NUMBER: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_delete_account_confirm)],
+        DELETE_ACCOUNT_CONFIRM: [CallbackQueryHandler(process_delete_account_confirm, pattern='^confirm_delete_(yes|no)$')],
+    },
+    fallbacks=[CommandHandler('cancel', cancel_command)],
+    per_message=False # Explicitly set
+)
+
+# Edit Account Conversation Handler
+edit_account_conv_handler = ConversationHandler(
+    entry_points=[CallbackQueryHandler(edit_account_start, pattern='^edit_account_prompt$')],
+    states={
+        EDIT_ACCOUNT_NUMBER: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_edit_account_field)],
+        EDIT_ACCOUNT_FIELD: [CallbackQueryHandler(ask_edit_account_value, pattern='^edit_field_')], # Handles button press
+        EDIT_ACCOUNT_VALUE: [MessageHandler(filters.TEXT & ~filters.COMMAND, save_edit_account)],
+    },
+    fallbacks=[CommandHandler('cancel', cancel_command), CallbackQueryHandler(ask_edit_account_value, pattern='^edit_field_cancel$')], # Allow cancel via button too
+    per_message=False # Explicitly set
+)
+
+# Delete Registration Conversation Handler
+delete_reg_conv_handler = ConversationHandler(
+    entry_points=[CallbackQueryHandler(delete_reg_start, pattern='^delete_reg_prompt$')],
+    states={
+        DELETE_REG_NUMBER: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_delete_reg_confirm)],
+        DELETE_REG_CONFIRM: [CallbackQueryHandler(process_delete_reg_confirm, pattern='^confirm_delreg_(yes|no)$')],
+    },
+    fallbacks=[CommandHandler('cancel', cancel_command)],
+    per_message=False # Explicitly set
+)
+
+
+# --- Main Function ---
+def main() -> None:
+    """Start the bot."""
+    # Create the Application and pass it your bot's token.
+    application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+
+    # --- Add Handlers ---
+    # Command Handlers
+    application.add_handler(CommandHandler("start", start_command))
+    application.add_handler(CommandHandler("menu", menu_command))
+    application.add_handler(CommandHandler("help", help_command))
+    application.add_handler(CommandHandler("list", list_accounts_command))
+    application.add_handler(CommandHandler("listreg", list_regs_command))
+    # Add other direct command aliases if implemented (e.g., /view, /delete, /delreg)
+    # application.add_handler(CommandHandler("view", view_account_command)) # Example
+    # application.add_handler(CommandHandler("delete", delete_account_command)) # Example
+    # application.add_handler(CommandHandler("delreg", delete_reg_command)) # Example
+
+    # Conversation Handlers
+    application.add_handler(reg_conv_handler)
+    application.add_handler(add_account_conv_handler)
+    application.add_handler(view_account_conv_handler)
+    application.add_handler(delete_account_conv_handler)
+    application.add_handler(edit_account_conv_handler)
+    application.add_handler(delete_reg_conv_handler)
+
+    # Callback Query Handlers (for buttons not part of conversations)
+    application.add_handler(CallbackQueryHandler(list_accounts_callback, pattern='^list_accounts$'))
+    application.add_handler(CallbackQueryHandler(list_regs_callback, pattern='^list_regs$'))
+    application.add_handler(CallbackQueryHandler(backup_data_callback, pattern='^backup_data$'))
+    application.add_handler(CallbackQueryHandler(help_command, pattern='^show_help$')) # Reuse help_command for button
+    application.add_handler(CallbackQueryHandler(license_status_callback, pattern='^license_status$'))
+
+    # Generic Cancel Command Handler (should be low priority if used outside conversations)
+    # Note: CommandHandler('cancel', cancel_command) is already added as fallback in conversations.
+    # Adding it here might conflict or be redundant depending on desired behavior.
+    # If you want /cancel to work *outside* conversations, add it here.
+    # application.add_handler(CommandHandler('cancel', cancel_command))
+
+
+    # --- Job Queue for License Check ---
+    job_queue = application.job_queue
+    # Run the check once shortly after startup, then daily
+    job_queue.run_once(check_license, when=timedelta(seconds=5)) # Check 5 seconds after start
+    job_queue.run_daily(check_license, time=datetime.strptime("03:00", "%H:%M").time()) # Check daily at 3 AM bot time
+
+    # --- Start the Bot ---
+    logger.info("Starting bot polling...")
+    application.run_polling()
+
+if __name__ == '__main__':
+    # Validate essential config before starting
+    if not TELEGRAM_BOT_TOKEN:
+        logger.critical("TELEGRAM_BOT_TOKEN not found in config.env. Exiting.")
+        exit(1)
+    if not ADMIN_CHAT_ID:
+        logger.critical("ADMIN_CHAT_ID not found or invalid in config.env. Exiting.")
+        exit(1)
+    if not ACTIVATION_DATE or not EXPIRATION_DATE:
+        logger.critical("ACTIVATION_DATE or EXPIRATION_DATE not found in config.env. Exiting.")
+        exit(1)
+    # Basic date format check at startup
+    try:
+        datetime.strptime(ACTIVATION_DATE, '%Y-%m-%d')
+        datetime.strptime(EXPIRATION_DATE, '%Y-%m-%d')
+    except ValueError:
+        logger.critical("Invalid date format found in ACTIVATION_DATE or EXPIRATION_DATE (use YYYY-MM-DD). Exiting.")
+        exit(1)
+
+    main()
