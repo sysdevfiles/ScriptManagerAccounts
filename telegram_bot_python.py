@@ -438,37 +438,49 @@ async def ask_add_registration_date(update: Update, context: ContextTypes.DEFAUL
         return ADD_REGISTRATION_DATE # Ask for registration date again
 
 async def save_add_account(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Stores the PIN, saves the account, deletes conversation messages, shows summary, and ends."""
+    """Stores the PIN, saves the account with both dates, shows summary or error, and ends the conversation."""
     chat_id = update.message.chat.id
-    # Store user reply ID (final input)
-    context.user_data.setdefault('user_message_ids', []).append(update.message.message_id)
-
-    save_successful = False
-    summary_message_text = "❌ Ocurrió un error inesperado al procesar la cuenta." # Default message
+    final_message = "❌ Ocurrió un error inesperado al procesar la cuenta." # Default error message
 
     try:
         # Ensure data exists before proceeding
         if 'add_account_data' not in context.user_data:
              logger.error("save_add_account called without add_account_data in context.")
-             summary_message_text = "❌ Ocurrió un error inesperado al procesar los datos. Por favor, cancela (/cancel) e intenta de nuevo."
+             final_message = "❌ Error Interno: No se encontraron datos temporales. Por favor, cancela (/cancel) e intenta de nuevo."
+             # Let finally handle cleanup/menu
+
         else:
+            # Store the last piece of data (PIN)
             context.user_data['add_account_data']['pin'] = update.message.text
+            # Add creation timestamp
             context.user_data['add_account_data']['creation_date'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
+            logger.info(f"Attempting to save new account data: {context.user_data['add_account_data']}")
+
+            # Load existing data
             accounts_data = load_data(DATA_FILE)
+            # Ensure the loaded data has the 'accounts' list structure
+            if 'accounts' not in accounts_data or not isinstance(accounts_data['accounts'], list):
+                logger.warning(f"Data file {DATA_FILE} has invalid structure. Resetting to default.")
+                accounts_data = {"accounts": []}
+
             new_account = context.user_data['add_account_data']
 
+            # Double-check essential dates (already checked in previous step, but good practice)
             if 'registration_date' not in new_account or 'renewal_date' not in new_account:
-                 logger.error(f"Missing dates in new_account data: {new_account}")
-                 summary_message_text = "❌ Faltan datos de fecha. Por favor, cancela (/cancel) e intenta de nuevo."
+                 logger.error(f"Critical Error: Missing dates in new_account data just before saving: {new_account}")
+                 final_message = "❌ Error Interno: Faltan datos de fecha críticos. Por favor, cancela (/cancel) e intenta de nuevo."
+                 # Let finally handle cleanup/menu
             else:
+                # Append the new account data
                 accounts_data['accounts'].append(new_account)
+                logger.info(f"Appended new account. Total accounts now: {len(accounts_data['accounts'])}")
 
+                # Attempt to save the updated data
                 if save_data(DATA_FILE, accounts_data):
-                    save_successful = True
-                    logger.info(f"Account added successfully: {new_account.get('service')} - {new_account.get('username')}")
-                    # Construct Summary Message (code unchanged from previous step)
-                    # ... summary message construction ...
+                    logger.info(f"Account added and saved successfully: {new_account.get('service')} - {new_account.get('username')}")
+
+                    # --- Construct Success Summary Message ---
                     service_escaped = escape_markdown(new_account.get('service', 'N/A'), version=2)
                     username_escaped = escape_markdown(new_account.get('username', 'N/A'), version=2)
                     password_masked = escape_markdown("*" * len(new_account.get('password', '')), version=2) if new_account.get('password') else 'N/A'
@@ -478,7 +490,7 @@ async def save_add_account(update: Update, context: ContextTypes.DEFAULT_TYPE) -
                     ren_date_escaped = escape_markdown(new_account.get('renewal_date', 'N/A'), version=2)
                     creation_date_escaped = escape_markdown(new_account.get('creation_date', 'N/A'), version=2)
 
-                    summary_message_text = (
+                    final_message = (
                         f"✅ *¡Cuenta Añadida Exitosamente!*\n\n"
                         f"*Resumen:*\n"
                         f" Servicio: *{service_escaped}*\n"
@@ -490,25 +502,40 @@ async def save_add_account(update: Update, context: ContextTypes.DEFAULT_TYPE) -
                         f" Fecha Renovación: `{ren_date_escaped}`\n"
                         f" Fecha Creación Bot: `{creation_date_escaped}`"
                     )
+                    # --- End Summary Message ---
                 else:
-                    summary_message_text = "❌ Error al guardar la cuenta en el archivo."
-                    logger.error("Failed to save account data to file.")
+                    # save_data returned False
+                    final_message = "❌ Error Crítico: No se pudo guardar la cuenta en el archivo. Verifica los permisos o el espacio en disco."
+                    logger.error(f"Failed to save account data to file {DATA_FILE}. save_data returned False.")
+                    # Attempt to remove the potentially added (but unsaved) account from memory
+                    # This might fail if accounts_data structure was bad, hence the check
+                    if 'accounts' in accounts_data and isinstance(accounts_data['accounts'], list) and accounts_data['accounts']:
+                         accounts_data['accounts'].pop() # Remove the last added item
 
     except Exception as e:
-        logger.error(f"Error in save_add_account: {e}", exc_info=True)
-        summary_message_text = "❌ Ocurrió un error inesperado al guardar la cuenta."
+        logger.error(f"Exception caught in save_add_account: {e}", exc_info=True)
+        final_message = f"❌ Ocurrió una excepción inesperada al guardar la cuenta: {e}"
     finally:
-        # Delete conversation messages BEFORE sending the final summary
-        await delete_conversation_messages(context, chat_id)
+        # Send the final summary or error message regardless of what happened
+        try:
+            await update.message.reply_text(final_message, parse_mode='MarkdownV2')
+        except Exception as send_e:
+            logger.error(f"Failed to send final message in save_add_account: {send_e}")
+            # Try sending a plain text message as fallback
+            try:
+                 await update.message.reply_text("Ocurrió un error al procesar y mostrar el resultado final.")
+            except Exception as fallback_send_e:
+                 logger.error(f"Failed to send fallback message: {fallback_send_e}")
 
-        # Send the final summary/error message
-        # This summary message will NOT be deleted by the current logic
-        await context.bot.send_message(chat_id=chat_id, text=summary_message_text, parse_mode='MarkdownV2')
 
-        # Clean up specific conversation data (add_account_data)
+        # Always clean up user data from context
         if 'add_account_data' in context.user_data:
-            del context.user_data['add_account_data']
-        # Note: delete_conversation_messages already cleaned up bot_message_ids and user_message_ids
+            try:
+                del context.user_data['add_account_data']
+                logger.info("Cleaned up context.user_data['add_account_data']")
+            except KeyError:
+                 logger.warning("Tried to clean up context.user_data['add_account_data'], but it was already gone.")
+
 
         # Show main menu again
         await send_main_menu(chat_id, context)
@@ -898,6 +925,7 @@ async def ask_delete_reg_confirm(update: Update, context: ContextTypes.DEFAULT_T
                 reply_markup=reply_markup,
                 parse_mode='MarkdownV2'
             )
+            # The deletion logic is handled in process_delete_reg_confirm
             return DELETE_REG_CONFIRM
         else:
             await update.message.reply_text(f"⚠️ Número fuera de rango\\. Hay {len(registrations)} registros\\.", parse_mode='MarkdownV2')
@@ -911,7 +939,7 @@ async def ask_delete_reg_confirm(update: Update, context: ContextTypes.DEFAULT_T
 
 @callback_restricted # Use callback restricted for button press
 async def process_delete_reg_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Processes the confirmation button press."""
+    """Processes the confirmation button press for deleting a registration."""
     query = update.callback_query
     chat_id = query.message.chat.id
     decision = query.data # 'confirm_delreg_yes' or 'confirm_delreg_no'
@@ -919,7 +947,7 @@ async def process_delete_reg_confirm(update: Update, context: ContextTypes.DEFAU
     if decision == 'confirm_delreg_yes' and 'delete_reg_index' in context.user_data:
         index_to_delete = context.user_data['delete_reg_index']
         reg_data = load_data(REG_DATA_FILE)
-        registrations = reg_data.get("registrations", [])
+        registrations = reg_data.get("registrations", []) # Use .get for safety
 
         if 0 <= index_to_delete < len(registrations):
             deleted_reg = registrations.pop(index_to_delete)
@@ -1148,92 +1176,10 @@ view_account_conv_handler = ConversationHandler(
 
 # Delete Account Conversation Handler
 delete_account_conv_handler = ConversationHandler(
-    entry_points=[CallbackQueryHandler(delete_account_start, pattern='^delete_account_prompt$')],
-    states={
-        DELETE_ACCOUNT_NUMBER: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_delete_account_confirm)],
-        DELETE_ACCOUNT_CONFIRM: [CallbackQueryHandler(process_delete_account_confirm, pattern='^confirm_delete_(yes|no)$')],
-    },
-    fallbacks=[CommandHandler('cancel', cancel_command)],
-)
-
-# Edit Account Conversation Handler
-edit_account_conv_handler = ConversationHandler(
-    entry_points=[CallbackQueryHandler(edit_account_start, pattern='^edit_account_prompt$')],
-    states={
-        EDIT_ACCOUNT_NUMBER: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_edit_account_field)],
-        EDIT_ACCOUNT_FIELD: [CallbackQueryHandler(ask_edit_account_value, pattern='^edit_field_')], # Handles button press
-        EDIT_ACCOUNT_VALUE: [MessageHandler(filters.TEXT & ~filters.COMMAND, save_edit_account)],
-    },
-    fallbacks=[CommandHandler('cancel', cancel_command), CallbackQueryHandler(ask_edit_account_value, pattern='^edit_field_cancel$')], # Allow cancel via button too
-)
-
-# Delete Registration Conversation Handler
-delete_reg_conv_handler = ConversationHandler(
-    entry_points=[CallbackQueryHandler(delete_reg_start, pattern='^delete_reg_prompt$')],
-    states={
-        DELETE_REG_NUMBER: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_delete_reg_confirm)],
-        DELETE_REG_CONFIRM: [CallbackQueryHandler(process_delete_reg_confirm, pattern='^confirm_delreg_(yes|no)$')],
-    },
-    fallbacks=[CommandHandler('cancel', cancel_command)],
-)
-
-
-# --- Main Function ---
-def main() -> None:
-    """Start the bot."""
-    if not TELEGRAM_BOT_TOKEN or not ADMIN_CHAT_ID or not EXPIRATION_DATE:
-        logger.critical("Missing essential configuration (Token, Admin ID, Expiration Date). Exiting.")
-        exit(1)
-
-    # Initial license check before starting
-    try:
-        expiration_dt = datetime.strptime(EXPIRATION_DATE, '%Y-%m-%d')
-        if datetime.now() > expiration_dt:
-             logger.critical(f"License expired on {EXPIRATION_DATE}. Cannot start bot.")
-             # Optionally send a message if possible, but likely fails if token is bad
-             exit(1)
-    except (ValueError, TypeError):
-         logger.critical(f"Invalid expiration date format '{EXPIRATION_DATE}'. Cannot start bot.")
-         exit(1)
-
-    logger.info(f"License valid until {EXPIRATION_DATE}. Starting bot...")
-
-
-    # Create the Application and pass it your bot's token.
-    application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
-
-    # --- Setup Job Queue for Periodic Tasks ---
-    job_queue = application.job_queue
-    application.add_handler(CommandHandler("menu", menu_command))
-    application.add_handler(CommandHandler("help", help_command))
-    application.add_handler(CommandHandler("cancel", cancel_command)) # Ensure cancel works outside conversations too
-    application.add_handler(CommandHandler("list", list_accounts_command)) # Alias
-    application.add_handler(CommandHandler("listreg", list_regs_command)) # Alias
-    # Add other command handlers here (/licencia_expira, non-interactive /view, /delete, /delreg)
-
-
-    # --- Add Conversation Handlers ---
-    # Order matters if entry points could overlap, but here they are distinct callbacks
-    application.add_handler(reg_conv_handler)
-    application.add_handler(add_account_conv_handler)
-    application.add_handler(view_account_conv_handler)
-    application.add_handler(delete_account_conv_handler)
-    application.add_handler(edit_account_conv_handler)
-    application.add_handler(delete_reg_conv_handler)
-
-    # --- Callback Query Handlers (Direct Actions / Fallbacks) ---
-    # These handle buttons NOT used as entry points for conversations
-    application.add_handler(CallbackQueryHandler(list_accounts_callback, pattern='^list_accounts$'))
-    application.add_handler(CallbackQueryHandler(list_regs_callback, pattern='^list_regs$'))
-    application.add_handler(CallbackQueryHandler(backup_data_callback, pattern='^backup_data$'))
-    application.add_handler(CallbackQueryHandler(help_command, pattern='^show_help$')) # Use help_command for the button
-    application.add_handler(CallbackQueryHandler(license_status_callback, pattern='^license_status$'))
-    # Handlers for confirmation buttons inside conversations are part of the ConversationHandler states
-
-
-    # Run the bot until the user presses Ctrl-C
-    logger.info("Bot is running. Press Ctrl+C to stop.")
-    application.run_polling()
-
-if __name__ == '__main__':
-    main()
+        entry_points=[CallbackQueryHandler(delete_account_start, pattern='^delete_account_prompt$')],
+        states={
+            DELETE_ACCOUNT_NUMBER: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_delete_account_confirm)],
+            DELETE_ACCOUNT_CONFIRM: [CallbackQueryHandler(process_delete_account_confirm, pattern='^confirm_delete_(yes|no)$')],
+        },
+        fallbacks=[CommandHandler('cancel', cancel_command)],
+    )
