@@ -1,6 +1,6 @@
 # Streaming Manager
 
-A simple tool to manage streaming service accounts, including username, password, PIN, plan details, and renewal date. Sends notifications to a Telegram chat.
+A simple tool to manage streaming service accounts, including username, password, PIN, plan details, renewal date, and creation date. Sends notifications to a Telegram chat.
 
 ## Setup
 
@@ -24,36 +24,47 @@ A simple tool to manage streaming service accounts, including username, password
     ssh your_username@your_vps_ip_address
     ```
 
-2.  **Transfer Files:**
-    Copy the project files (`streaming_manager.sh`, `install.sh`, `.gitignore`) to your VPS. You can use `scp` or clone the repository if you are using Git.
-    *   **Using `scp` (from your local machine):**
-        ```bash
-        scp -r /path/to/your/local/Streaming\ Manager your_username@your_vps_ip_address:~/streaming_manager
-        ```
-        (Replace `/path/to/your/local/Streaming\ Manager` with the actual path on your computer and `~/streaming_manager` with the desired location on the VPS).
-    *   **Using Git:**
+2.  **Install Dependencies Manually:**
+    This tool requires `jq` and `curl`. Install them using your VPS's package manager:
+    *   Debian/Ubuntu: `sudo apt update && sudo apt install jq curl git wget unzip`
+    *   CentOS/RHEL: `sudo yum install jq curl git wget unzip`
+    (You only need `git` or `wget`/`unzip` depending on the download method below).
+
+3.  **Get the Files:** Choose **one** of the following methods:
+
+    *   **Method A: Using `git clone` (Recommended)**
         ```bash
         # On your VPS
-        git clone <your_repository_url> streaming_manager
+        git clone https://github.com/sysdevfiles/ScriptManagerAccounts.git streaming_manager
         cd streaming_manager
         ```
 
-3.  **Navigate to Directory:**
-    Change into the directory where you transferred the files:
-    ```bash
-    cd ~/streaming_manager # Or the directory you chose
-    ```
+    *   **Method B: Using `wget` and `unzip`**
+        ```bash
+        # On your VPS
+        wget https://github.com/sysdevfiles/ScriptManagerAccounts/archive/refs/heads/main.zip -O ScriptManagerAccounts.zip
+        unzip ScriptManagerAccounts.zip
+        cd ScriptManagerAccounts-main
+        # Optional: Rename the directory
+        # cd .. && mv ScriptManagerAccounts-main streaming_manager && cd streaming_manager
+        ```
 
-4.  **Run Installation Script:**
-    Execute the installation script. This will check dependencies, ask for your Telegram details, and set up permissions.
+4.  **Set Permissions Manually:**
+    Navigate into the project directory (`streaming_manager` or `ScriptManagerAccounts-main`) and make the main script executable:
+    ```bash
+    chmod +x streaming_manager.sh
+    ```
+    The data file (`streaming_accounts.json`) will be created with appropriate permissions by the main script on first run if needed, or you can create it manually (`touch streaming_accounts.json && chmod 600 streaming_accounts.json`).
+
+5.  **Configure Telegram:**
+    Run the `install.sh` script. This script **only** configures the Telegram settings by asking for your Bot Token and Chat ID and saving them to `config.env`.
     ```bash
     bash install.sh
     ```
-    *   **Dependencies:** The script attempts to install `jq` and `curl`. If it fails (e.g., due to permissions or unknown package manager), you might need to install them manually using your VPS's package manager (like `sudo apt update && sudo apt install jq curl` for Debian/Ubuntu, or `sudo yum install jq curl` for CentOS/RHEL).
-    *   **Telegram Details:** Have your Telegram Bot Token and Chat ID ready when prompted.
+    Have your Telegram Bot Token and Chat ID ready.
 
-5.  **Verify:**
-    After the installation script finishes, you should have `config.env` and `streaming_accounts.json` files created with the correct permissions.
+6.  **Verify:**
+    After running `install.sh`, you should have a `config.env` file with the correct permissions.
 
 ## Saving to GitHub
 
@@ -105,8 +116,30 @@ Now your code is saved on GitHub. You can use `git pull` to fetch updates and `g
 
 ## Usage
 
-Run the main script to access the interactive menu:
+Ensure dependencies are installed and `streaming_manager.sh` is executable. Then run the main script:
 ```bash
-./scripts/streaming_manager.sh
+./streaming_manager.sh
 ```
-Follow the on-screen prompts to list, add, edit, or delete accounts. Confirmation messages and account lists (when requested) will be sent to your configured Telegram chat.
+Follow the on-screen prompts to list, add, edit, or delete accounts. The creation date is automatically recorded when adding an account. Confirmation messages and account lists (when requested) will be sent to your configured Telegram chat.
+
+## Uninstallation
+
+To remove the Streaming Manager scripts and configuration:
+
+1.  **Navigate to Directory:**
+    Make sure you are in the directory where the scripts are located (e.g., `~/streaming_manager`).
+    ```bash
+    cd ~/streaming_manager
+    ```
+
+2.  **Run Uninstall Script:**
+    Execute the `uninstall.sh` script. You might need to make it executable first if you haven't already or if permissions were reset.
+    ```bash
+    chmod +x uninstall.sh # Ensure it's executable
+    ./uninstall.sh
+    ```
+
+3.  **Confirm:**
+    *   The script will first ask for confirmation to remove the application files and configuration (`config.env`).
+    *   It will then ask separately if you want to delete the account data file (`streaming_accounts.json`). **Be careful**, as deleting this file removes all your stored account information.
+    *   If confirmed, the script will remove the specified files and finally itself.

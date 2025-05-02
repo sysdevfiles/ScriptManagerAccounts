@@ -60,13 +60,15 @@ add_account() {
     echo
     read -p "Plan: " plan
     read -p "Renewal Date (YYYY-MM-DD): " renewal_date
+    local creation_date=$(date +%Y-%m-%d) # Get current date
 
-    jq --arg s "$service" --arg u "$username" --arg p "$password" --arg pin "$pin" --arg pl "$plan" --arg rd "$renewal_date" \
-       '.accounts += [{service: $s, username: $u, password: $p, pin: $pin, plan: $pl, renewal_date: $rd}]' \
+    jq --arg s "$service" --arg u "$username" --arg p "$password" --arg pin "$pin" \
+       --arg pl "$plan" --arg rd "$renewal_date" --arg cd "$creation_date" \
+       '.accounts += [{service: $s, username: $u, password: $p, pin: $pin, plan: $pl, renewal_date: $rd, creation_date: $cd}]' \
        "$DATA_FILE" > "$TMP_FILE" && mv "$TMP_FILE" "$DATA_FILE"
 
-    local message="Account for *$service* added successfully\\." # Escape Markdown characters
-    echo "Account for $service added successfully." # Console message
+    local message="Account for *$service* added successfully on $creation_date\\." # Escape Markdown characters
+    echo "Account for $service added successfully on $creation_date." # Console message
     send_telegram_message "$message"
 }
 
