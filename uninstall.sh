@@ -1,7 +1,7 @@
 #!/bin/bash
-# Uninstallation script for Streaming Manager Bot
+# Uninstallation script for Streaming Manager Bot (Python Version)
 
-echo "--- Streaming Manager Bot Uninstallation ---"
+echo "--- Streaming Manager Bot (Python) Uninstallation ---"
 read -p "Are you sure you want to remove Streaming Manager Bot and its configuration? (y/N): " confirm
 
 if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
@@ -23,7 +23,7 @@ if [[ "$confirm_data" =~ ^[Yy]$ ]]; then
     echo "Removing registration data file (registrations.json)..."
     rm -f registrations.json
     echo "Removing update offset file (update_offset.txt)..."
-    rm -f update_offset.txt
+    rm -f update_offset.txt # Keep removing this for now, though Python version doesn't use it yet
 else
     echo "Keeping data files."
 fi
@@ -31,21 +31,27 @@ fi
 echo "Removing temporary files..."
 rm -f streaming_accounts.tmp
 rm -f registrations.tmp
+rm -f *.pyc # Remove Python cache files
+rm -rf __pycache__ # Remove Python cache directory
 
-echo "Removing script files (telegram_bot_manager.sh, configure_bot.sh, vps_bot_installer.sh, README.md)..." # Updated list
-rm -f telegram_bot_manager.sh
+echo "Removing script files (telegram_bot_python.py, configure_bot.sh, vps_installer.sh, README.md)..." # Updated list
+rm -f telegram_bot_python.py # Changed from telegram_bot_manager.sh
 rm -f configure_bot.sh
-rm -f vps_bot_installer.sh # Changed from vps_installer.sh
+rm -f vps_installer.sh # Changed from vps_bot_installer.sh
 rm -f README.md
 rm -f .gitignore
 
 # Remove obsolete scripts just in case they weren't removed by installer
 rm -f streaming_manager.sh
 rm -f install.sh
+rm -f telegram_bot_manager.sh # Ensure old bash bot is removed
 rm -f "# Streaming Manager.md"
 rm -f "# Streaming Manager (Bot Version).md"
 
 echo "Streaming Manager Bot files removed."
+# Optionally add steps to uninstall python libraries if desired, but usually not necessary
+# echo "Note: Python libraries (python-dotenv, python-telegram-bot) are not automatically uninstalled."
+
 echo "Removing uninstall script (uninstall.sh)..."
 rm -- "$0" # Self-delete
 

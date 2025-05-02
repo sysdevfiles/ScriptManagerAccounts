@@ -1,28 +1,25 @@
-# Streaming Manager (Bot de Telegram en Bash)
+# Streaming Manager (Bot de Telegram en Python)
 
-Una herramienta para gestionar cuentas de streaming usando un bot de Telegram. Esta versión utiliza un script Bash que escucha comandos enviados al bot.
+Una herramienta para gestionar cuentas de streaming y registros de usuarios usando un bot de Telegram. Esta versión utiliza Python y la librería `python-telegram-bot`.
 
-**Advertencia:** Esta es una implementación básica en Bash. Para bots más complejos o robustos, se recomiendan lenguajes como Python o Node.js.
+**Nota:** Esta versión implementa la funcionalidad básica y el registro de usuarios paso a paso. Otras funciones (gestión de cuentas, backups, etc.) se portarán gradualmente.
 
 ## Características
 
-*   Gestión de Cuentas Streaming (Añadir, listar, ver, editar, eliminar) vía Telegram.
-*   **Gestión de Registros de Usuarios** (Añadir, listar, eliminar) vía Telegram.
+*   **Gestión de Registros de Usuarios** (Añadir paso a paso, listar, eliminar) vía Telegram.
 *   **Menú interactivo con botones** para iniciar acciones comunes.
-*   **Backup de datos** de cuentas streaming.
 *   Notificaciones de confirmación.
-*   Notificaciones automáticas de cuentas streaming próximas a vencer.
 *   Almacenamiento de datos en archivos JSON (`streaming_accounts.json`, `registrations.json`).
 *   Restricción de comandos y botones al Chat ID del administrador.
-*   Comprobación para evitar reconfiguración accidental.
-*   Sistema de Licencia con desactivación remota.
-*   Comandos de Admin para gestionar la licencia.
+*   Sistema de Licencia con comprobación periódica y desactivación.
+*   *Próximamente:* Gestión completa de Cuentas Streaming, Backups, Notificaciones de Renovación.
 
 ## Requisitos
 
-*   `bash`
-*   `jq` (procesador JSON de línea de comandos)
-*   `curl` (herramienta de transferencia de datos)
+*   `python3` (versión 3.7 o superior recomendada)
+*   `pip3` (gestor de paquetes de Python)
+*   Librerías Python listadas en `requirements.txt` (`python-telegram-bot`, `python-dotenv`)
+*   `git`, `jq`, `curl` (para el instalador y scripts auxiliares)
 *   Un Bot de Telegram y su **Token**.
 *   Tu **Chat ID** de Telegram.
 
@@ -31,9 +28,9 @@ Una herramienta para gestionar cuentas de streaming usando un bot de Telegram. E
 1.  **Instalar en VPS (Método Recomendado):**
     Conéctate a tu VPS y ejecuta el siguiente comando en tu directorio home (`~`). Este comando descarga, da permisos, ejecuta y luego elimina el script de instalación.
     ```bash
-    wget --no-cache https://raw.githubusercontent.com/sysdevfiles/ScriptManagerAccounts/main/vps_bot_installer.sh -O vps_bot_installer.sh && chmod +x vps_bot_installer.sh && ./vps_bot_installer.sh && rm vps_bot_installer.sh
+    wget --no-cache https://raw.githubusercontent.com/sysdevfiles/ScriptManagerAccounts/main/vps_installer.sh -O vps_installer.sh && chmod +x vps_installer.sh && ./vps_installer.sh && rm vps_installer.sh
     ```
-    *   El script instalador (`vps_bot_installer.sh`) clonará el repositorio en `~/streaming_manager`, instalará dependencias (`git`, `jq`, `curl`), configurará permisos y creará un comando `menu` global.
+    *   El script instalador (`vps_installer.sh`) clonará el repositorio en `~/streaming_manager`, instalará dependencias (`git`, `jq`, `curl`, `python3`, `pip3`), instalará las librerías Python necesarias, configurará permisos y creará un comando `menu` global.
 
 2.  **Configurar el Bot:**
     Después de ejecutar el instalador, **debes** configurar tus credenciales y la licencia ejecutando:
@@ -45,8 +42,9 @@ Una herramienta para gestionar cuentas de streaming usando un bot de Telegram. E
 3.  **(Alternativa) Instalación Manual:**
     *   Clona el repositorio: `git clone https://github.com/sysdevfiles/ScriptManagerAccounts.git streaming_manager`
     *   Navega al directorio: `cd streaming_manager`
-    *   Instala dependencias: `sudo apt update && sudo apt install -y jq curl git` (o `yum`)
-    *   Da permisos: `chmod +x telegram_bot_manager.sh configure_bot.sh uninstall.sh`
+    *   Instala dependencias del sistema: `sudo apt update && sudo apt install -y jq curl git python3 python3-pip` (o `yum`)
+    *   Instala librerías Python: `sudo pip3 install -r requirements.txt`
+    *   Da permisos a scripts auxiliares: `chmod +x configure_bot.sh uninstall.sh`
     *   Configura: `./configure_bot.sh`
 
 ## Ejecución
@@ -57,7 +55,7 @@ Puedes ejecutar el bot de dos maneras:
 ```bash
 # Navega al directorio de instalación si no estás ahí
 cd ~/streaming_manager # O la ruta donde lo instalaste
-./telegram_bot_manager.sh
+python3 telegram_bot_python.py
 ```
 El bot comenzará a escuchar mensajes. Verás la salida en la terminal. Para detenerlo, presiona `Ctrl+C`.
 
@@ -69,7 +67,7 @@ El bot comenzará a escuchar mensajes. Verás la salida en la terminal. Para det
         ```ini
         # filepath: /etc/systemd/system/streaming_bot.service
         [Unit]
-        Description=Streaming Manager Telegram Bot
+        Description=Streaming Manager Telegram Bot (Python)
         After=network.target
 
         [Service]
@@ -77,10 +75,12 @@ El bot comenzará a escuchar mensajes. Verás la salida en la terminal. Para det
         User=root # O tu usuario no-root
         # CAMBIA ESTA RUTA a donde se clonó el repo (ej. /root/streaming_manager o /home/user/streaming_manager)
         WorkingDirectory=/root/streaming_manager
-        # CAMBIA ESTA RUTA para que coincida con WorkingDirectory
-        ExecStart=/bin/bash /root/streaming_manager/telegram_bot_manager.sh
+        # CAMBIA ESTA RUTA para que coincida con WorkingDirectory y usa python3
+        ExecStart=/usr/bin/python3 /root/streaming_manager/telegram_bot_python.py
         Restart=on-failure
         RestartSec=5
+        StandardOutput=journal # Redirige stdout a journald
+        StandardError=journal  # Redirige stderr a journald
 
         [Install]
         WantedBy=multi-user.target
@@ -114,84 +114,37 @@ La interacción principal se realiza a través del menú de botones. Envía `/me
 
 **Menú Principal (Botones):**
 *   Envía `/menu` para mostrar el menú principal con botones.
-*   **Fila 1 (Cuentas Streaming):**
-    *   `📊 Listar Cuentas:` Muestra la lista de cuentas.
-    *   `📄 Ver Cuenta:` Pide enviar `/view <Numero>`.
-    *   `➕ Añadir Cuenta:` Explica formato `/add ...`.
-    *   `✏️ Editar Cuenta:` Explica formato `/edit <Numero> ...`.
-    *   `🗑️ Eliminar Cuenta:` Explica formato `/delete <Numero>`.
+*   **Fila 1 (Cuentas Streaming):** _(Funcionalidad pendiente de implementación)_
+    *   `📊 Listar Cuentas:`
+    *   `📄 Ver Cuenta:`
+    *   `➕ Añadir Cuenta:`
+    *   `✏️ Editar Cuenta:`
+    *   `🗑️ Eliminar Cuenta:`
 *   **Fila 2 (Registros Usuarios):**
-    *   `👤 Registrar Usuario:` Explica formato `/register Plataforma;Nombre;...`.
-    *   `👥 Listar Registros:` Muestra la lista de usuarios registrados.
-    *   `❌ Borrar Registro:` Pide enviar `/delreg <Numero>`.
+    *   `👤 Registrar Usuario:` Inicia el proceso de registro paso a paso.
+    *   `👥 Listar Registros:` _(Funcionalidad pendiente)_
+    *   `❌ Borrar Registro:` _(Funcionalidad pendiente)_
 *   **Fila 3 (Utilidades/Admin):**
-    *   `💾 Backup:` Envía `streaming_accounts.json` y `registrations.json`.
+    *   `💾 Backup:` _(Funcionalidad pendiente)_
     *   `❓ Ayuda:` Muestra la ayuda detallada.
-    *   `🔒 Licencia:` Muestra el estado de la licencia.
+    *   `🔒 Licencia:` _(Funcionalidad pendiente)_
 
-**Comandos de Texto (Usados después de las indicaciones de los botones o directamente):**
-*   `/add <Servicio> <Usuario> <Contraseña> <Plan> <YYYY-MM-DD> [PIN]`
-    Añade una cuenta streaming.
-*   `/edit <Numero> <Campo>=<NuevoValor>`
-    Modifica un campo de una cuenta streaming.
-*   `/delete <Numero>`
-    Elimina una cuenta streaming.
-*   `/view <Numero>`
-    Muestra detalles de una cuenta streaming.
-*   `/register <Plataforma>;<Nombre>;<Celular>;<TipoPago>;<Email>;<PIN>;<FechaAlta>;<FechaVenc>`
-    Registra un nuevo usuario. **Importante:** Usar punto y coma ';' como separador y sin espacios alrededor. El PIN es opcional (dejar vacío entre ;; si no aplica).
-*   `/listreg`
-    Lista los usuarios registrados (alternativa al botón).
-*   `/delreg <Numero>`
-    Elimina un registro de usuario.
-*   `/list`
-    Muestra la lista de cuentas (alternativa al botón).
-*   `/backup`
-    Genera y envía el backup de cuentas y registros (alternativa al botón).
-*   `/help` o `/start`
-    Muestra la ayuda completa (alternativa al botón).
-*   `/licencia_estado`
-    Muestra el estado de la licencia (alternativa al botón).
-*   `/licencia_expira <YYYY-MM-DD>`
-    Establece una nueva fecha de expiración para la licencia (solo comando de texto).
-
-## Notificaciones de Vencimiento
-
-El bot comprobará periódicamente (por defecto cada 6 horas, configurable en el script `telegram_bot_manager.sh`) si alguna cuenta tiene una fecha de renovación (`renewal_date`) dentro de los próximos 30 días (configurable). Si encuentra alguna, enviará un mensaje de alerta a tu chat de administrador. Asegúrate de que las fechas de renovación estén en formato `YYYY-MM-DD`.
+**Comandos de Texto:**
+*   `/start`, `/help`: Muestra la ayuda.
+*   `/menu`: Muestra el menú de botones.
+*   `/cancel`: Cancela una operación en curso (como el registro).
+*   *Otros comandos (`/add`, `/edit`, `/delete`, `/view`, `/listreg`, `/delreg`, `/list`, `/backup`, `/licencia_estado`, `/licencia_expira`) se implementarán gradualmente.*
 
 ## Funcionamiento de la Licencia
 
-*   Al configurar el bot con `./configure_bot.sh`, se establece una fecha de activación (hoy) y una fecha de expiración basada en los días que indiques.
-*   El bot (`telegram_bot_manager.sh`) comprueba al iniciarse y luego periódicamente (cada hora por defecto) si la fecha actual ha superado la fecha de expiración guardada en `config.env`.
-*   Si la licencia ha expirado, el bot enviará un último mensaje al chat del administrador indicándolo y el script se detendrá.
-*   Puedes usar el comando `/licencia_expira` para extender la fecha de expiración mientras el bot aún está en funcionamiento.
+*   Al configurar el bot con `./configure_bot.sh`, se establece una fecha de activación y expiración en `config.env`.
+*   El bot Python (`telegram_bot_python.py`) comprueba la licencia al iniciarse y luego periódicamente (cada hora por defecto).
+*   Si la licencia ha expirado, el bot enviará un mensaje al admin y se detendrá.
+*   *Próximamente:* Comando `/licencia_expira` para extenderla.
 
 ## Desactivación Remota por el Administrador Principal
 
-El administrador principal (que controla un bot de administración central, como `@ManagerAccounts_bot`) puede desactivar remotamente este bot reseller utilizando el sistema de licencias.
-
-Para hacerlo, el bot administrador principal debe enviar el comando `/licencia_expira` directamente a *este* bot reseller, estableciendo una fecha en el pasado.
-
-**Pasos para el Admin Principal:**
-
-1.  El bot de administración debe conocer el `TELEGRAM_BOT_TOKEN` y el `ADMIN_CHAT_ID` del bot reseller a desactivar.
-2.  El bot de administración debe usar la API de Telegram para enviar un mensaje al `ADMIN_CHAT_ID` del reseller, utilizando el `TELEGRAM_BOT_TOKEN` del reseller. El contenido del mensaje debe ser:
-    ```
-    /licencia_expira 2000-01-01
-    ```
-    (O cualquier otra fecha claramente en el pasado).
-3.  El bot reseller recibirá este comando, actualizará su `EXPIRATION_DATE` en `config.env`.
-4.  En la siguiente comprobación de licencia (máximo una hora después), el bot reseller detectará la fecha expirada y se detendrá automáticamente, notificando a su `ADMIN_CHAT_ID`.
-
-**Nota:** La implementación del bot de administración principal no forma parte de este conjunto de scripts.
-
-## Limitaciones (Bash Bot)
-
-*   **Interfaz Guiada por Texto:** Las operaciones que requieren datos complejos (añadir/editar cuenta, registrar usuario, eliminar/ver específicos) necesitan comandos de texto formateados.
-*   **Análisis de Comandos Frágil:** Especialmente sensible con el comando `/register` y el uso del punto y coma.
-*   **Sin Concurrencia.**
-*   **Manejo de Errores Básico.**
-*   **Edición Campo por Campo (Cuentas).** No hay edición para registros implementada.
+_(La lógica es la misma, pero el comando `/licencia_expira` debe ser implementado en el bot Python para que funcione)._
 
 ## Desinstalación
 
@@ -202,8 +155,9 @@ Para hacerlo, el bot administrador principal debe enviar el comando `/licencia_e
     sudo rm /etc/systemd/system/streaming_bot.service
     sudo systemctl daemon-reload
     ```
-2.  **Eliminar Archivos:**
-    Elimina el directorio donde clonaste/copiaste los scripts (ej. `streaming_manager_bot`).
+2.  **Ejecutar script de desinstalación:**
+    Navega al directorio del bot (ej. `~/streaming_manager`) y ejecuta:
     ```bash
-    rm -rf ~/streaming_manager_bot # Ajusta la ruta si es necesario
+    ./uninstall.sh
     ```
+    Confirma las acciones cuando se te pregunte. El script eliminará los archivos del bot, la configuración, el enlace `menu` y, opcionalmente, los datos.

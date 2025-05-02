@@ -5,3 +5,7 @@ registrations.tmp # Added tmp file for registrations
 
 # Optional: Uncomment the line below if you DO NOT want to commit user registration data to Git
 # registrations.json
+
+# Python cache files
+*.pyc
+__pycache__/

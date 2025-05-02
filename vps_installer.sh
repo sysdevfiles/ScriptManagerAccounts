@@ -1,5 +1,5 @@
 #!/bin/bash
-# Installer script for Streaming Manager on a VPS
+# Installer script for Streaming Manager Bot (Python Version) on a VPS
 
 REPO_URL="https://github.com/sysdevfiles/ScriptManagerAccounts.git"
 INSTALL_DIR="streaming_manager"
@@ -17,27 +17,32 @@ fi
 # Get the absolute path to the install directory *before* changing into it
 ABS_INSTALL_DIR="$(pwd)/$INSTALL_DIR"
 
-echo "--- Streaming Manager VPS Installer ---"
+echo "--- Streaming Manager Bot (Python) VPS Installer ---"
 
 # --- Attempt Dependency Installation ---
-echo "Checking and attempting to install dependencies (git, jq, curl)..."
+echo "Checking and attempting to install dependencies (git, jq, curl, python3, python3-pip)..."
 install_cmd=""
 pkg_manager=""
 
 if command -v apt-get &> /dev/null; then
     pkg_manager="apt-get"
-    install_cmd="sudo apt-get update && sudo apt-get install -y git jq curl"
+    # Added python3 and python3-pip
+    install_cmd="sudo apt-get update && sudo apt-get install -y git jq curl python3 python3-pip"
 elif command -v yum &> /dev/null; then
     pkg_manager="yum"
-    install_cmd="sudo yum install -y git jq curl"
+    # Added python3 and python3-pip (package names might vary slightly on CentOS/RHEL)
+    install_cmd="sudo yum install -y git jq curl python3 python3-pip"
 else
-    echo "Warning: Could not detect apt-get or yum. Please ensure git, jq, and curl are installed manually."
+    echo "Warning: Could not detect apt-get or yum. Please ensure git, jq, curl, python3, and python3-pip are installed manually."
 fi
 
 missing_deps=()
 command -v git >/dev/null 2>&1 || missing_deps+=("git")
 command -v jq >/dev/null 2>&1 || missing_deps+=("jq")
 command -v curl >/dev/null 2>&1 || missing_deps+=("curl")
+command -v python3 >/dev/null 2>&1 || missing_deps+=("python3")
+command -v pip3 >/dev/null 2>&1 || missing_deps+=("pip3")
+
 
 if [ ${#missing_deps[@]} -ne 0 ]; then
     echo "Missing dependencies: ${missing_deps[*]}"
@@ -49,6 +54,8 @@ if [ ${#missing_deps[@]} -ne 0 ]; then
         command -v git >/dev/null 2>&1 || missing_deps+=("git")
         command -v jq >/dev/null 2>&1 || missing_deps+=("jq")
         command -v curl >/dev/null 2>&1 || missing_deps+=("curl")
+        command -v python3 >/dev/null 2>&1 || missing_deps+=("python3")
+        command -v pip3 >/dev/null 2>&1 || missing_deps+=("pip3")
         if [ ${#missing_deps[@]} -ne 0 ]; then
              echo "Error: Failed to install dependencies: ${missing_deps[*]}"
              echo "Please install them manually and re-run the installer."
@@ -59,7 +66,7 @@ if [ ${#missing_deps[@]} -ne 0 ]; then
         exit 1
     fi
 fi
-echo "Dependencies found or installed."
+echo "System dependencies found or installed."
 
 # --- Clone Repository ---
 echo "Cloning repository from $REPO_URL into $INSTALL_DIR..."
@@ -88,17 +95,29 @@ fi
 ABS_INSTALL_DIR="$(pwd)"
 
 echo "Setting execute permissions for scripts..."
-chmod +x telegram_bot_manager.sh # Changed from streaming_manager.sh
-chmod +x configure_bot.sh       # Added configure_bot.sh
+# chmod +x telegram_bot_manager.sh # Removed old bash script
+chmod +x configure_bot.sh
 chmod +x uninstall.sh
-# Remove chmod for install.sh if it's being deleted later
-# chmod +x install.sh
+# No need to make python script executable, will run with python3 interpreter
 if [ $? -ne 0 ]; then
     echo "Error: Failed to set permissions."
     # Attempt to clean up cloned directory before exiting
     cd .. && rm -rf "$INSTALL_DIR"
     exit 1
 fi
+
+# --- Install Python Libraries using requirements.txt ---
+echo "Installing required Python libraries from requirements.txt..."
+if sudo pip3 install -r requirements.txt; then
+    echo "Python libraries installed successfully."
+else
+    echo "Error: Failed to install Python libraries using pip3 and requirements.txt."
+    echo "Please check your pip3 installation, network connection, and requirements.txt."
+    # Attempt to clean up cloned directory before exiting
+    cd .. && rm -rf "$INSTALL_DIR"
+    exit 1
+fi
+
 
 # --- Create 'menu' command (symlink) ---
 echo "Creating system-wide 'menu' command for Telegram Bot configuration..."
@@ -116,9 +135,10 @@ else
 fi
 
 # --- Clean up old scripts --- # Added section
-echo "Removing obsolete scripts (streaming_manager.sh, install.sh)..."
+echo "Removing obsolete scripts (streaming_manager.sh, install.sh, telegram_bot_manager.sh)..."
 rm -f streaming_manager.sh
 rm -f install.sh
+rm -f telegram_bot_manager.sh # Remove the old bash bot script
 
 # --- Clean up old README --- # Added section
 echo "Removing obsolete README (# Streaming Manager.md)..."
@@ -129,8 +149,9 @@ if [[ -f "# Streaming Manager (Bot Version).md" ]]; then
 fi
 
 echo "--- Installation Complete ---"
-echo "Streaming Manager Bot files are installed in the '$INSTALL_DIR' directory."
-echo "IMPORTANT: Run 'sudo menu' now to configure your Telegram Bot Token, Admin Chat ID, and License." # Updated message
-echo "After configuration, run the manager using: cd $INSTALL_DIR && ./telegram_bot_manager.sh" # Updated run command
+echo "Streaming Manager Bot (Python) files are installed in the '$INSTALL_DIR' directory."
+echo "IMPORTANT: Run 'sudo menu' now to configure your Telegram Bot Token, Admin Chat ID, and License."
+# Updated run command for Python
+echo "After configuration, run the manager using: cd $INSTALL_DIR && python3 telegram_bot_python.py"
 
 exit 0
