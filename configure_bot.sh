@@ -105,6 +105,7 @@ fi
 
 echo
 echo -e "${COL_BOLD}${COL_GREEN}Configuración completada.${COL_RESET}"
-echo -e "Ahora puedes ejecutar el bot con: ${COL_YELLOW}./telegram_bot_manager.sh${COL_RESET}"
+# Updated command to run the Python bot
+echo -e "Ahora puedes ejecutar el bot con: ${COL_YELLOW}python3 telegram_bot_python.py${COL_RESET}"
 echo -e "${COL_YELLOW}Se recomienda ejecutarlo en segundo plano o como un servicio (ver README).${COL_RESET}"
 

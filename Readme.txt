@@ -6,4 +6,5 @@ sudo apt update && sudo apt install screen
 screen -S streaming_bot
 
 cd ~/streaming_manager
-./telegram_bot_manager.sh
+# Updated command to run the Python bot
+python3 telegram_bot_python.py

@@ -69,13 +69,12 @@ fi
 echo "System dependencies found or installed."
 
 # --- Clone Repository ---
+# Remove old directory if it exists to ensure a clean installation
+if [ -d "$INSTALL_DIR" ]; then
+    echo "Directorio de instalación anterior '$INSTALL_DIR' encontrado. Eliminándolo para una instalación limpia..."
+    rm -rf "$INSTALL_DIR"
+fi
 echo "Cloning repository from $REPO_URL into $INSTALL_DIR..."
-# Remove check for existing directory to allow re-installation/update
-# if [ -d "$INSTALL_DIR" ]; then
-#     echo "Directory $INSTALL_DIR already exists. Please remove or rename it first."
-#     exit 1
-# fi
-rm -rf "$INSTALL_DIR" # Remove old directory if it exists
 git clone "$REPO_URL" "$INSTALL_DIR"
 if [ $? -ne 0 ]; then
     echo "Error: Failed to clone repository."
