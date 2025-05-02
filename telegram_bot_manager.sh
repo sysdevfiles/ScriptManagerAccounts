@@ -422,6 +422,8 @@ handle_register() {
 
     if mv "$REG_TMP_FILE" "$REG_DATA_FILE"; then
         sendMessage "$chat_id" "Usuario *$name* registrado exitosamente para la plataforma *$platform*\\."
+        # Send welcome message
+        sendMessage "$chat_id" "🎉 ¡Bienvenido/a, *$name*\\! Tu registro para *$platform* ha sido completado\\."
         echo -e "${COL_GREEN}Registro añadido para $name ($platform).${COL_RESET}"
     else
         sendMessage "$chat_id" "Error al guardar el registro para *$name*\\."
@@ -643,12 +645,12 @@ while true; do
                 "view_account_prompt") sendMessage "$callback_chat_id" "Para ver detalles, envía: \`/view Numero\`" ;;
                 "add_account_prompt") sendMessage "$callback_chat_id" "Para añadir cuenta, envía:\n\`/add Servicio Usuario Contraseña Plan YYYY-MM-DD [PIN]\`" ;;
                 "edit_account_prompt") sendMessage "$callback_chat_id" "Para editar cuenta, envía:\n\`/edit Numero Campo=NuevoValor\`" ;;
-                "delete_account_prompt") sendMessage "$callback_chat_id" "Para eliminar cuenta, envía: \`/delete Numero\` ;;
+                "delete_account_prompt") sendMessage "$callback_chat_id" "Para eliminar cuenta, envía: \`/delete Numero\`" ;; # Fixed missing quote
 
                 # Registration Callbacks
                 "register_user_prompt") # New
-                    # Escape parentheses \( and \) for MarkdownV2 and shell safety
-                    sendMessage "$callback_chat_id" "Para registrar un usuario, envía el comando con *todos* los campos separados por punto y coma \\';':\n\`/register Plataforma;Nombre;Celular;TipoPago;Email;PIN;FechaAlta;FechaVenc\`\n*\\(Ej: /register Netflix;Juan Perez;12345;Paypal;jp@mail.com;1234;2024-01-01;2025-01-01\\)*"
+                    # Removed example line to avoid syntax errors
+                    sendMessage "$callback_chat_id" "Para registrar un usuario, envía el comando con *todos* los campos separados por punto y coma \\';':\n\`/register Plataforma;Nombre;Celular;TipoPago;Email;PIN;FechaAlta;FechaVenc\`"
                     ;;
                 "list_regs") # New
                     handle_list_registrations "$callback_chat_id"
@@ -658,7 +660,7 @@ while true; do
                     ;;
 
                 # Utility/Admin Callbacks
-                "backup_data") handle_backup "$callback_chat_id" ;; # Consider backing up both files?
+                "backup_data") handle_backup "$callback_chat_id" ;;
                 "show_help") handle_help "$callback_chat_id" ;;
                 "license_status") handle_license_status "$callback_chat_id" ;;
                 *) sendMessage "$callback_chat_id" "Acción desconocida desde botón: \`$callback_data\`" ;;
