@@ -52,15 +52,23 @@ sendMessage() {
     local chat_id="$1"
     local text="$2"
     local keyboard_json="$3" # Optional: JSON string for inline keyboard
-    local encoded_text=$(printf %s "$text" | jq -s -R -r @uri)
-    local data_payload="-d chat_id=${chat_id} -d text=${encoded_text} -d parse_mode=MarkdownV2"
 
+    # Prepare base arguments for curl
+    local curl_args=(
+        -s -o /dev/null -X POST
+        "${API_URL}/sendMessage"
+        -d "chat_id=${chat_id}"
+        --data-urlencode "text=${text}" # Use --data-urlencode for robustness
+        -d "parse_mode=MarkdownV2"
+    )
+
+    # Add reply_markup if keyboard_json is provided
     if [[ -n "$keyboard_json" ]]; then
-        data_payload+=" -d reply_markup=${keyboard_json}"
+        curl_args+=(-d "reply_markup=${keyboard_json}")
     fi
 
-    # Use eval carefully to construct the curl command
-    eval curl -s -o /dev/null -X POST "${API_URL}/sendMessage" $data_payload
+    # Execute curl directly with the arguments array
+    curl "${curl_args[@]}"
 }
 
 # Function to answer callback queries (acknowledge button press)
@@ -635,7 +643,7 @@ while true; do
                 "view_account_prompt") sendMessage "$callback_chat_id" "Para ver detalles, envía: \`/view Numero\`" ;;
                 "add_account_prompt") sendMessage "$callback_chat_id" "Para añadir cuenta, envía:\n\`/add Servicio Usuario Contraseña Plan YYYY-MM-DD [PIN]\`" ;;
                 "edit_account_prompt") sendMessage "$callback_chat_id" "Para editar cuenta, envía:\n\`/edit Numero Campo=NuevoValor\`" ;;
-                "delete_account_prompt") sendMessage "$callback_chat_id" "Para eliminar cuenta, envía: \`/delete Numero\`" ;;
+                "delete_account_prompt") sendMessage "$callback_chat_id" "Para eliminar cuenta, envía: \`/delete Numero\` ;;
 
                 # Registration Callbacks
                 "register_user_prompt") # New
