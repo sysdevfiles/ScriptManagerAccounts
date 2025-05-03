@@ -47,8 +47,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         logger.info(f"Comando /start recibido de user_id: {user_id} ({user_name})")
 
         # --- Lógica original restaurada ---
-        is_admin_user = db.is_admin(user_id)
-        is_authorized_user, _ = db.is_authorized(user_id) # Ignoramos la fecha de expiración aquí
+        # Comprobar si el user_id coincide con el ADMIN_USER_ID cargado
+        is_admin_user = (ADMIN_USER_ID is not None and user_id == ADMIN_USER_ID)
+        is_authorized_user, _ = db.is_authorized(user_id) # Esta función sí existe en db
         logger.info(f"User {user_id}: is_admin={is_admin_user}, is_authorized={is_authorized_user}")
 
         welcome_message = f"¡Hola, {user_name}! 👋\n\nBienvenido al Gestor de Cuentas."
@@ -76,7 +77,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Muestra la ayuda."""
     user_id = update.effective_user.id
-    is_admin_user = db.is_admin(user_id)
+    # Reemplazar también aquí
+    is_admin_user = (ADMIN_USER_ID is not None and user_id == ADMIN_USER_ID)
     is_authorized, _ = db.is_authorized(user_id)
 
     help_text = "🤖 *Comandos Disponibles*\n\n"
