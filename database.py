@@ -162,3 +162,42 @@ def escape_markdown(text: str) -> str:
         else:
             escaped_text += char
     return escaped_text
+
+def get_all_accounts_with_ids() -> list[dict]:
+    """Obtiene todas las cuentas de la tabla 'accounts' con su ID."""
+    conn = sqlite3.connect(DB_FILE)
+    conn.row_factory = sqlite3.Row # Devolver resultados como diccionarios
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT id, service, email, profile_name, pin FROM accounts ORDER BY service, profile_name")
+        accounts = [dict(row) for row in cursor.fetchall()]
+        logger.info(f"Recuperadas {len(accounts)} cuentas de la base de datos.")
+        return accounts
+    except sqlite3.Error as e:
+        logger.error(f"Error al obtener todas las cuentas: {e}")
+        return []
+    finally:
+        conn.close()
+
+def get_assigned_accounts_for_user(user_id: int) -> list[dict]:
+    """Obtiene los detalles de las cuentas asignadas a un usuario específico."""
+    conn = sqlite3.connect(DB_FILE)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    try:
+        # Unir 'assignments' con 'accounts' para obtener los detalles
+        cursor.execute("""
+            SELECT a.id, a.service, a.email, a.profile_name, a.pin
+            FROM accounts a
+            JOIN assignments asn ON a.id = asn.account_id
+            WHERE asn.user_id = ?
+            ORDER BY a.service, a.profile_name
+        """, (user_id,))
+        assigned = [dict(row) for row in cursor.fetchall()]
+        logger.info(f"Recuperadas {len(assigned)} cuentas asignadas para user_id {user_id}.")
+        return assigned
+    except sqlite3.Error as e:
+        logger.error(f"Error al obtener cuentas asignadas para user_id {user_id}: {e}")
+        return []
+    finally:
+        conn.close()

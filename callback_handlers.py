@@ -11,7 +11,7 @@ import user_handlers
 # Importar funciones específicas de admin_handlers que serán llamadas por botones
 from admin_handlers import (
     list_users as admin_list_users_func,
-    list_all_accounts as admin_list_all_accounts_func,
+    list_all_accounts as admin_list_all_accounts_func, # <-- DESCOMENTADO
     list_assignments as admin_list_assignments_func
     # Importa otras funciones si creas botones para ellas (add_user, add_account, etc.)
     # Nota: Para añadir/asignar, es mejor guiar al usuario con mensajes que usar botones directos aquí
@@ -106,11 +106,11 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
          )
 
     # --- Nuevos Handlers para Admin ---
-    elif callback_data == 'admin_list_all_accounts':
+    elif callback_data == 'admin_list_all_accounts': # <-- INICIO BLOQUE DESCOMENTADO
          if is_admin_user:
              await admin_list_all_accounts_func(update, context) # Asumiendo que maneja query
          else:
-             await query.edit_message_text(text="⛔ Acceso denegado.")
+             await query.edit_message_text(text="⛔ Acceso denegado.") # <-- FIN BLOQUE DESCOMENTADO
     elif callback_data == 'admin_list_assignments':
          if is_admin_user:
              await admin_list_assignments_func(update, context) # Asumiendo que maneja query

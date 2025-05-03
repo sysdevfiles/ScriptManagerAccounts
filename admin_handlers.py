@@ -5,11 +5,14 @@ import os
 from dotenv import load_dotenv
 from telegram import Update
 from telegram.ext import ContextTypes
+from telegram.constants import ParseMode # Importar ParseMode
 
 # Importar funciones de base de datos y otros módulos necesarios
 import database as db
 # Importar selectivamente para evitar dependencia circular completa
 from user_handlers import get_main_menu_keyboard
+from user_handlers import ADMIN_USER_ID # Asumiendo que está definido en user_handlers
+from callback_handlers import get_back_to_menu_keyboard # Para el botón de volver
 
 # Cargar ADMIN_USER_ID para comprobaciones
 load_dotenv()
@@ -19,6 +22,25 @@ logger = logging.getLogger(__name__)
 
 # --- Funciones de Comandos de Admin ---
 
+# Decorador para verificar si el usuario es admin
+def admin_required(func):
+    async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
+        user_id = update.effective_user.id
+        if ADMIN_USER_ID is None:
+             logger.critical("ADMIN_USER_ID no está configurado. Denegando acceso de admin.")
+             await update.message.reply_text("Error de configuración: ADMIN_USER_ID no definido.")
+             return None # O manejar de otra forma
+        if user_id != ADMIN_USER_ID:
+            logger.warning(f"Intento de acceso de admin fallido por user_id: {user_id}")
+            # No enviar mensaje si es callback, ya que callback_handlers lo maneja
+            if update.message:
+                 await update.message.reply_text("⛔ No tienes permiso para usar este comando.")
+            # Si es callback, callback_handlers ya debería haber respondido o lo hará
+            return None
+        return await func(update, context, *args, **kwargs)
+    return wrapper
+
+@admin_required
 async def add_account(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """(Admin) Añade una nueva cuenta de streaming."""
     user_id = update.effective_user.id
@@ -53,6 +75,7 @@ async def add_account(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         await update.message.reply_text("Ocurrió un error al guardar la cuenta.")
 
 
+@admin_required
 async def add_user(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """(Admin) Añade o actualiza un usuario autorizado."""
     admin_id = update.effective_user.id
@@ -105,6 +128,7 @@ async def add_user(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text("Ocurrió un error al añadir al usuario.")
 
 
+@admin_required
 async def list_users(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """(Admin) Lista todos los usuarios autorizados."""
     query = update.callback_query
@@ -162,3 +186,74 @@ async def list_users(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
             await query.edit_message_text(text=message)
         else:
             await update.message.reply_text(text=message)
+
+@admin_required
+async def list_all_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """(Admin) Lista todas las cuentas/perfiles registrados con su ID."""
+    query = update.callback_query
+    is_callback = bool(query)
+    user_id = update.effective_user.id # Ya verificado por @admin_required
+
+    logger.info(f"list_all_accounts: user_id={user_id}, is_callback={is_callback}")
+
+    if is_callback:
+        await query.answer()
+
+    try:
+        all_accounts = db.get_all_accounts_with_ids() # Necesitas esta función en database.py
+
+        if not all_accounts:
+            message = "ℹ️ No hay ninguna cuenta registrada en la base de datos."
+        else:
+            accounts_text_list = ["🧾 *Todas las Cuentas Registradas:*"]
+            for acc in all_accounts:
+                acc_id = acc.get('id', '??')
+                service = acc.get('service', 'N/A')
+                email = acc.get('email', 'N/A')
+                profile = acc.get('profile_name', 'N/A')
+                pin = acc.get('pin', 'N/A')
+
+                # Escapar caracteres para Markdown
+                service_escaped = db.escape_markdown(service)
+                email_escaped = db.escape_markdown(email)
+                profile_escaped = db.escape_markdown(profile)
+                pin_escaped = db.escape_markdown(pin)
+
+                accounts_text_list.append(
+                    f"\n*ID:* `{acc_id}`\n"
+                    f"  Servicio: {service_escaped}\n"
+                    f"  Email: {email_escaped}\n"
+                    f"  Perfil: {profile_escaped}\n"
+                    f"  PIN: `{pin_escaped}`"
+                )
+            message = "\n".join(accounts_text_list)
+            message += "\n\n_Usa el ID para asignar cuentas con /assign_"
+
+        # Determinar teclado
+        # Usamos get_main_menu_keyboard de user_handlers para comandos
+        # y get_back_to_menu_keyboard de callback_handlers para callbacks
+        from user_handlers import get_main_menu_keyboard as get_user_main_menu # Evitar conflicto nombres
+        final_keyboard = get_back_to_menu_keyboard() if is_callback else get_user_main_menu(True) # True porque es admin
+
+        # Enviar respuesta
+        if is_callback:
+            await query.edit_message_text(text=message, parse_mode=ParseMode.MARKDOWN, reply_markup=final_keyboard)
+        elif update.message:
+            # Dividir mensaje si es muy largo (Telegram tiene límite ~4096 chars)
+            if len(message) > 4000:
+                 logger.warning("Mensaje de list_all_accounts demasiado largo, enviando sin formato completo.")
+                 # Simplificar o paginar si es necesario, por ahora enviamos truncado o simple
+                 simplified_message = "ℹ️ La lista de cuentas es muy larga. Se muestra un resumen:\n"
+                 simplified_message += "\n".join([f"- ID: {a.get('id','??')} {a.get('service','N/A')} ({a.get('profile_name','N/A')})" for a in all_accounts[:50]]) # Mostrar solo 50
+                 await update.message.reply_text(simplified_message, reply_markup=final_keyboard)
+            else:
+                 await update.message.reply_text(text=message, parse_mode=ParseMode.MARKDOWN, reply_markup=final_keyboard)
+
+    except Exception as e:
+        logger.error(f"Error al procesar list_all_accounts para {user_id}: {e}", exc_info=True)
+        error_message = "⚠️ Ocurrió un error al obtener la lista completa de cuentas."
+        final_keyboard = get_back_to_menu_keyboard() if is_callback else get_user_main_menu(True)
+        if is_callback:
+            await query.edit_message_text(text=error_message, reply_markup=final_keyboard)
+        elif update.message:
+            await update.message.reply_text(text=error_message, reply_markup=final_keyboard)
