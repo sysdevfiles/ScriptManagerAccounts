@@ -30,7 +30,8 @@ echo "Directorio de instalación: $BOT_DIR"
 # --- 0. Limpieza Opcional ---
 if [ -d "$BOT_DIR" ] || [ -f "/etc/systemd/system/${SERVICE_NAME}.service" ]; then
     read -p "Parece que existe una instalación anterior. ¿Deseas limpiarla? (s/N): " clean_confirm
-    if [[ "$clean_confirm" =~ ^[Ss]$ ]]; then
+    # Aceptar s, S, y, o Y como confirmación
+    if [[ "$clean_confirm" =~ ^[SsYy]$ ]]; then
         echo "Limpiando instalación anterior..."
         systemctl stop ${SERVICE_NAME}.service > /dev/null 2>&1
         systemctl disable ${SERVICE_NAME}.service > /dev/null 2>&1
