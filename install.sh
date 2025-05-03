@@ -21,9 +21,7 @@ SERVICE_NAME="telegrambot"
 PYTHON_EXEC="python3"
 # !!! URL del repositorio actualizada !!!
 GITHUB_REPO_URL="https://github.com/sysdevfiles/ScriptManagerAccounts.git"
-# !!! Credenciales Hardcoded (NO RECOMENDADO POR SEGURIDAD) !!!
-BOT_TOKEN="7755771824:AAGc0F0aKngsT3x91DYwMJihwWN8xu0LauI"
-ADMIN_ID="5797883359"
+# --- Credenciales eliminadas de aquí ---
 
 
 echo "--- Iniciando Instalación del Bot Gestor de Cuentas para el usuario '$CURRENT_USER' ---"
@@ -47,18 +45,18 @@ fi
 
 
 # --- 1. Prerrequisitos del Sistema ---
-echo "[1/7] Actualizando sistema e instalando paquetes base..."
+echo "[1/8] Actualizando sistema e instalando paquetes base..."
 apt update
 # apt upgrade -y # Comentado para rapidez, descomentar si se desea upgrade completo
 apt install -y $PYTHON_EXEC ${PYTHON_EXEC}-pip ${PYTHON_EXEC}-venv sqlite3 libsqlite3-dev git curl # Añadido git y curl
 
 # --- 2. Crear Directorio Padre (si es necesario, git clone crea el directorio final) ---
-echo "[2/7] Asegurando directorio padre $USER_HOME..."
+echo "[2/8] Asegurando directorio padre $USER_HOME..."
 mkdir -p "$USER_HOME"
 # No se necesita chown si es root
 
 # --- 3. Clonar Repositorio ---
-echo "[3/7] Clonando repositorio desde $GITHUB_REPO_URL..."
+echo "[3/8] Clonando repositorio desde $GITHUB_REPO_URL..."
 # Clonar directamente como root
 git clone "$GITHUB_REPO_URL" "$BOT_DIR"
 if [ $? -ne 0 ]; then
@@ -71,36 +69,55 @@ if [ ! -f "$BOT_DIR/bot.py" ] || [ ! -f "$BOT_DIR/requirements.txt" ]; then
     exit 1
 fi
 
-# --- 4. Crear Archivo .env Automáticamente ---
-echo "[4/7] Creando archivo .env con credenciales..."
+# --- 4. Crear/Verificar .env (Paso Manual Requerido) ---
+echo "[4/8] Verificando archivo .env..."
 ENV_FILE_PATH="$BOT_DIR/.env"
-# Crear el archivo .env con las credenciales hardcoded
-cat << EOF > "$ENV_FILE_PATH"
-# Archivo .env generado automáticamente por install.sh
-TELEGRAM_BOT_TOKEN="$BOT_TOKEN"
-ADMIN_USER_ID="$ADMIN_ID"
-EOF
+echo "---------------------------------------------------------------------"
+echo "[PASO MANUAL REQUERIDO]"
+echo "El código fuente ha sido clonado en $BOT_DIR."
+echo "Ahora DEBES crear o verificar el archivo .env en $ENV_FILE_PATH con tu TOKEN y ADMIN_ID:"
+echo "  Ejemplo de contenido para $ENV_FILE_PATH:"
+echo '  # Inserte su token de Telegram (obtenido de @BotFather)'
+echo '  TELEGRAM_BOT_TOKEN="TU_TOKEN_DE_BOTFATHER"'
+echo '  # Inserte su ID de Telegram (obtenido de @userinfobot)'
+echo '  ADMIN_USER_ID="TU_ID_DE_USERINFOBOT"'
+echo ""
+echo "Puedes usar el siguiente comando para crearlo/editarlo (si no lo has hecho ya):"
+echo "  nano $ENV_FILE_PATH"
+echo "---------------------------------------------------------------------"
 
-# Verificar creación y establecer permisos
-if [ -f "$ENV_FILE_PATH" ]; then
-    echo "Verificando permisos de $ENV_FILE_PATH..."
-    chown root:root "$ENV_FILE_PATH"
-    if [ $? -ne 0 ]; then
-         echo "ADVERTENCIA: No se pudo cambiar el propietario de $ENV_FILE_PATH."
+while true; do
+    read -p "Presiona Enter CUANDO hayas creado/verificado el archivo .env en $ENV_FILE_PATH..."
+    # Verificar si .env existe
+    if [ -f "$ENV_FILE_PATH" ]; then
+        # Asegurar permisos correctos para .env ANTES de configurar systemd
+        echo "Verificando permisos de $ENV_FILE_PATH..."
+        chown root:root "$ENV_FILE_PATH" # Asumiendo ejecución como root
+        if [ $? -ne 0 ]; then
+             echo "ADVERTENCIA: No se pudo cambiar el propietario de $ENV_FILE_PATH."
+        fi
+        chmod 600 "$ENV_FILE_PATH"
+         if [ $? -ne 0 ]; then
+             echo "ADVERTENCIA: No se pudo cambiar los permisos de $ENV_FILE_PATH a 600."
+        fi
+        echo "Archivo .env detectado y permisos ajustados (propietario: root, modo: 600). Continuando..."
+        break # Salir del bucle si el archivo existe
+    else
+        # Si el archivo NO existe, mostrar error y el comando nano
+        echo "---------------------------------------------------------------------"
+        echo "ERROR: El archivo .env NO se encontró en $ENV_FILE_PATH."
+        echo "Por favor, créalo usando el comando:"
+        echo "  nano $ENV_FILE_PATH"
+        echo "Y pega dentro tu TELEGRAM_BOT_TOKEN y ADMIN_USER_ID."
+        echo "Luego, guarda (Ctrl+O, Enter) y sal (Ctrl+X)."
+        echo "---------------------------------------------------------------------"
+        # El bucle continuará y volverá a pedir presionar Enter
     fi
-    chmod 600 "$ENV_FILE_PATH"
-     if [ $? -ne 0 ]; then
-         echo "ADVERTENCIA: No se pudo cambiar los permisos de $ENV_FILE_PATH a 600."
-    fi
-    echo "Archivo .env creado y permisos ajustados (propietario: root, modo: 600)."
-else
-    echo "ERROR: Falló la creación automática del archivo .env en $ENV_FILE_PATH."
-    exit 1
-fi
+done
 
 
 # --- 5. Entorno Virtual ---
-echo "[5/7] Creando entorno virtual..."
+echo "[5/8] Creando entorno virtual..."
 # Ejecutar directamente como root
 $PYTHON_EXEC -m venv "$BOT_DIR/venv"
 if [ $? -ne 0 ]; then
@@ -115,7 +132,7 @@ fi
 
 
 # --- 6. Instalar Dependencias ---
-echo "[6/7] Instalando dependencias de Python..."
+echo "[6/8] Instalando dependencias de Python..."
 # Activar venv y ejecutar pip directamente como root
 bash -c "source \"$BOT_DIR/venv/bin/activate\" && pip install --upgrade pip && pip install -r \"$BOT_DIR/requirements.txt\""
 if [ $? -ne 0 ]; then
@@ -124,7 +141,7 @@ if [ $? -ne 0 ]; then
 fi
 
 # --- 7. Configurar systemd ---
-echo "[7/7] Configurando servicio systemd ($SERVICE_NAME.service)..."
+echo "[7/8] Configurando servicio systemd ($SERVICE_NAME.service)..."
 SERVICE_FILE_PATH="/etc/systemd/system/${SERVICE_NAME}.service"
 # Asegurar permisos de ejecución para el script principal del bot (como root)
 chmod +x "$BOT_DIR/bot.py"
@@ -170,7 +187,7 @@ echo "Archivo $SERVICE_FILE_PATH creado."
 # echo "------------------------------------"
 
 # --- 8. Iniciar Servicio ---
-echo "Recargando systemd y habilitando el servicio..."
+echo "[8/8] Recargando systemd y habilitando el servicio..."
 systemctl daemon-reload
 systemctl enable ${SERVICE_NAME}.service
 
@@ -205,7 +222,7 @@ if [ "$SERVICE_STATUS" != "active" ]; then
      echo "  6. Reiniciar servicio después de corregir: sudo systemctl restart ${SERVICE_NAME}.service"
      echo "---------------------------------------------------------------------"
 
-     # --- INICIO: Limpieza automática en caso de fallo ---
+     # --- INICIO: Limpieza automática en caso de fallo (REACTIVADA) ---
      echo "Intentando limpiar la instalación fallida..."
      echo "Deteniendo el servicio (si está corriendo)..."
      systemctl stop ${SERVICE_NAME}.service > /dev/null 2>&1
