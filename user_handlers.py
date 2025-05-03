@@ -9,9 +9,16 @@ from telegram.ext import ContextTypes
 # Importar funciones de base de datos y otros módulos necesarios
 import database as db
 
-# Cargar ADMIN_USER_ID para comprobaciones (aunque status_command lo usa)
+# Cargar y verificar ADMIN_USER_ID
 load_dotenv()
-ADMIN_USER_ID = int(os.getenv("ADMIN_USER_ID"))
+ADMIN_USER_ID_STR = os.getenv("ADMIN_USER_ID")
+ADMIN_USER_ID = None
+if ADMIN_USER_ID_STR and ADMIN_USER_ID_STR.isdigit():
+    ADMIN_USER_ID = int(ADMIN_USER_ID_STR)
+    logging.info(f"ADMIN_USER_ID cargado correctamente: {ADMIN_USER_ID}")
+else:
+    logging.critical("Error: ADMIN_USER_ID no encontrado o inválido en .env al cargar user_handlers.py")
+    # Considera si el bot debe detenerse aquí o continuar con funcionalidad limitada
 
 logger = logging.getLogger(__name__)
 
@@ -28,42 +35,45 @@ def get_main_menu_keyboard(is_admin: bool) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(keyboard)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Envía un mensaje de bienvenida con el menú principal."""
-    # --- NUEVO LOG ---
-    logger.info(f"Función start iniciada para el update: {update.update_id}")
+    """(SIMPLIFICADO) Envía un mensaje de bienvenida básico."""
+    logger.info(f"--- FUNCIÓN START (SIMPLIFICADA) INICIADA --- Update ID: {update.update_id}")
     try:
         user = update.effective_user
         if not user:
-            logger.warning("No se pudo obtener effective_user en start.")
+            logger.warning("No se pudo obtener effective_user en start (simplificado).")
             return
         user_id = user.id
         user_name = user.first_name
-        logger.info(f"Comando /start recibido de user_id: {user_id} ({user_name})")
+        logger.info(f"Comando /start (simplificado) recibido de user_id: {user_id} ({user_name})")
 
-        is_admin_user = db.is_admin(user_id)
-        is_authorized_user, _ = db.is_authorized(user_id) # Ignoramos la fecha de expiración aquí
-        logger.info(f"User {user_id}: is_admin={is_admin_user}, is_authorized={is_authorized_user}")
+        # --- Lógica original comentada ---
+        # is_admin_user = db.is_admin(user_id)
+        # is_authorized_user, _ = db.is_authorized(user_id)
+        # logger.info(f"User {user_id}: is_admin={is_admin_user}, is_authorized={is_authorized_user}")
+        # welcome_message = f"¡Hola, {user_name}! 👋\n\nBienvenido al Gestor de Cuentas."
+        # if is_authorized_user or is_admin_user:
+        #      welcome_message += "\nPuedes usar los botones de abajo o escribir /help para ver los comandos."
+        # else:
+        #     welcome_message += "\nParece que no tienes acceso autorizado. Contacta al administrador."
+        # keyboard = get_main_menu_keyboard(is_admin_user)
+        # --- Fin lógica original comentada ---
 
-        welcome_message = f"¡Hola, {user_name}! 👋\n\nBienvenido al Gestor de Cuentas."
-        if is_authorized_user or is_admin_user:
-             welcome_message += "\nPuedes usar los botones de abajo o escribir /help para ver los comandos."
-        else:
-            welcome_message += "\nParece que no tienes acceso autorizado. Contacta al administrador."
+        # --- Mensaje de prueba simple ---
+        welcome_message = f"¡Hola {user_name}! Recibí tu /start."
+        keyboard = None # Sin teclado por ahora
+        # --- Fin mensaje de prueba ---
 
-        keyboard = get_main_menu_keyboard(is_admin_user) # Llama a la función definida localmente
-        logger.info(f"Preparado para enviar mensaje de bienvenida a user_id: {user_id}") # --- NUEVO LOG ---
+        logger.info(f"Preparado para enviar mensaje de bienvenida (simplificado) a user_id: {user_id}")
 
         await update.message.reply_text(welcome_message, reply_markup=keyboard)
-        logger.info(f"Mensaje de bienvenida enviado a user_id: {user_id}") # --- NUEVO LOG ---
+        logger.info(f"Mensaje de bienvenida (simplificado) enviado a user_id: {user_id}")
 
     except Exception as e:
-        # --- NUEVO LOG DE ERROR ---
-        logger.error(f"Error dentro de la función start: {e}", exc_info=True)
-        # Opcional: Informar al usuario del error
+        logger.error(f"Error dentro de la función start (simplificada): {e}", exc_info=True)
         try:
-            await update.message.reply_text("Ocurrió un error procesando tu solicitud. Por favor, intenta más tarde.")
+            await update.message.reply_text("Ocurrió un error procesando tu solicitud (simplificada).")
         except Exception as send_error:
-            logger.error(f"No se pudo enviar mensaje de error al usuario {user_id}: {send_error}")
+            logger.error(f"No se pudo enviar mensaje de error (simplificado) al usuario {user_id}: {send_error}")
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Muestra la ayuda."""

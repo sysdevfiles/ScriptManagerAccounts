@@ -61,7 +61,7 @@ Puedes intentar usar el siguiente comando para descargar y ejecutar el script de
 ```bash
 wget --no-cache https://raw.githubusercontent.com/sysdevfiles/ScriptManagerAccounts/main/install.sh -O install.sh && chmod +x install.sh && sudo bash install.sh && rm install.sh
 ```
-*Este comando descargará `install.sh`, lo hará ejecutable, lo ejecutará con `sudo` (necesario para instalar paquetes y configurar `systemd`), y luego lo eliminará. Aún así, **requerirá tu intervención manual** durante la ejecución para crear el archivo `.env` con tus credenciales.*
+*Este comando descargará `install.sh`, lo hará ejecutable, lo ejecutará con `sudo` (necesario para instalar paquetes y configurar `systemd`), y luego lo eliminará. **Requerirá tu intervención manual** durante la ejecución para crear el archivo `.env` con tus credenciales si no existe.*
 
 **Pasos Detallados (Alternativa Manual)**
 
