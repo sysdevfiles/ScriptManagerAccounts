@@ -1,0 +1,71 @@
+import logging
+import os
+from dotenv import load_dotenv
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackQueryHandler
+
+# Importar módulos locales de handlers
+import database as db
+import user_handlers
+import admin_handlers
+import callback_handlers # Importar para el CallbackQueryHandler
+
+# Cargar variables de entorno
+load_dotenv()
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+ADMIN_USER_ID_STR = os.getenv("ADMIN_USER_ID") # Leer como string primero
+
+# Configurar logging
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
+)
+logger = logging.getLogger(__name__)
+
+def main() -> None:
+    """Configura e inicia el bot."""
+
+    # Validar variables de entorno
+    if not TELEGRAM_BOT_TOKEN:
+        logger.critical("Error: No se encontró el TELEGRAM_BOT_TOKEN en las variables de entorno.")
+        return
+    if not ADMIN_USER_ID_STR or not ADMIN_USER_ID_STR.isdigit():
+         logger.critical("Error: No se encontró o es inválido el ADMIN_USER_ID en las variables de entorno.")
+         return
+    # ADMIN_USER_ID ya se carga en database.py y handlers.py
+
+    # Inicializar la base de datos
+    try:
+        db.init_db()
+    except Exception as e:
+        logger.critical(f"No se pudo inicializar la base de datos: {e}. Abortando.")
+        return
+
+    # Crear la Application
+    application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+
+    # --- Registrar Handlers ---
+
+    # Comandos de Usuario (desde user_handlers.py)
+    application.add_handler(CommandHandler("start", user_handlers.start))
+    application.add_handler(CommandHandler("help", user_handlers.help_command))
+    application.add_handler(CommandHandler("status", user_handlers.status_command)) # También botón
+    application.add_handler(CommandHandler("list", user_handlers.list_accounts))   # También botón
+    application.add_handler(CommandHandler("get", user_handlers.get_account))
+
+    # Comandos de Admin (desde admin_handlers.py)
+    application.add_handler(CommandHandler("add", admin_handlers.add_account))
+    application.add_handler(CommandHandler("adduser", admin_handlers.add_user))
+    application.add_handler(CommandHandler("listusers", admin_handlers.list_users)) # También botón
+
+    # Callback Handler (desde callback_handlers.py)
+    application.add_handler(CallbackQueryHandler(callback_handlers.button_callback_handler))
+
+    # Manejador para comandos desconocidos (desde user_handlers.py)
+    application.add_handler(MessageHandler(filters.COMMAND, user_handlers.unknown))
+
+    # Iniciar el Bot
+    logger.info("Iniciando el bot...")
+    application.run_polling()
+    logger.info("Bot detenido.")
+
+if __name__ == "__main__":
+    main()
