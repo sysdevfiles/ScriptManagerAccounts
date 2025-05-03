@@ -9,7 +9,7 @@ from telegram.ext import ContextTypes
 # Importar funciones de base de datos y otros módulos necesarios
 import database as db
 # Importar selectivamente para evitar dependencia circular completa
-from callback_handlers import get_main_menu_keyboard
+from user_handlers import get_main_menu_keyboard
 
 # Cargar ADMIN_USER_ID para comprobaciones
 load_dotenv()

@@ -7,7 +7,6 @@ from dotenv import load_dotenv
 # Importar funciones de base de datos y handlers específicos
 import database as db
 import user_handlers
-import admin_handlers
 
 # Cargar ADMIN_USER_ID para comprobaciones
 load_dotenv()
@@ -26,33 +25,6 @@ CALLBACK_SHOW_HELP = "show_help"
 CALLBACK_BACK_TO_MENU = "back_to_menu" # Nuevo: Botón para volver al menú
 
 # --- Funciones de Menú con Botones ---
-
-def get_main_menu_keyboard(user_id: int) -> InlineKeyboardMarkup:
-    """Genera el teclado del menú principal según el tipo de usuario."""
-    keyboard = [
-        [InlineKeyboardButton("📊 Mi Estado", callback_data=CALLBACK_SHOW_STATUS)],
-    ]
-
-    if db.is_user_authorized(user_id):
-        keyboard.insert(0,
-            [
-                InlineKeyboardButton("📄 Listar Cuentas", callback_data=CALLBACK_LIST_ACCOUNTS),
-                # InlineKeyboardButton("🔑 Obtener Cuenta", callback_data=CALLBACK_GET_ACCOUNT_PROMPT) # Aún no implementado vía botón
-            ]
-        )
-
-    if user_id == ADMIN_USER_ID:
-        keyboard.append(
-            [
-                InlineKeyboardButton("➕ Añadir Servicio", callback_data=CALLBACK_ADMIN_ADD_ACCOUNT),
-                InlineKeyboardButton("👤 Añadir Usuario", callback_data=CALLBACK_ADMIN_ADD_USER),
-            ]
-        )
-        keyboard.append(
-             [InlineKeyboardButton("👥 Listar Usuarios", callback_data=CALLBACK_ADMIN_LIST_USERS)]
-        )
-
-    return InlineKeyboardMarkup(keyboard)
 
 def get_back_to_menu_keyboard() -> InlineKeyboardMarkup:
      """Genera un teclado con solo el botón de volver al menú."""
@@ -106,7 +78,8 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
 
     elif callback_data == CALLBACK_ADMIN_LIST_USERS:
          if user_id == ADMIN_USER_ID:
-             await admin_handlers.list_users(update, context)
+             from admin_handlers import list_users as admin_list_users_func
+             await admin_list_users_func(update, context)
              # Añadir botón de volver al menú después de listar
              await query.message.reply_text("Acciones:", reply_markup=get_back_to_menu_keyboard(), quote=False)
          else:
@@ -114,7 +87,7 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
 
     elif callback_data == CALLBACK_BACK_TO_MENU:
          # Volver a mostrar el menú principal editando el mensaje original del menú
-         keyboard = get_main_menu_keyboard(user_id)
+         keyboard = user_handlers.get_main_menu_keyboard(user_id)
          await query.edit_message_text(
              "Menú Principal:",
              reply_markup=keyboard

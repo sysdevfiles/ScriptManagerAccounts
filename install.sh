@@ -222,19 +222,17 @@ if [ "$SERVICE_STATUS" != "active" ]; then
      echo "  6. Reiniciar servicio después de corregir: sudo systemctl restart ${SERVICE_NAME}.service"
      echo "---------------------------------------------------------------------"
 
-     # --- INICIO: Limpieza automática en caso de fallo (REACTIVADA) ---
-     echo "Intentando limpiar la instalación fallida..."
-     echo "Deteniendo el servicio (si está corriendo)..."
-     systemctl stop ${SERVICE_NAME}.service > /dev/null 2>&1
-     echo "Deshabilitando el servicio..."
-     systemctl disable ${SERVICE_NAME}.service > /dev/null 2>&1
-     echo "Eliminando el directorio del bot: $BOT_DIR..."
-     rm -rf "$BOT_DIR"
-     echo "Eliminando el archivo de servicio: $SERVICE_FILE_PATH..."
-     rm -f "$SERVICE_FILE_PATH"
-     echo "Recargando systemd..."
-     systemctl daemon-reload
-     echo "Limpieza automática completada. Por favor, revisa los errores e intenta la instalación de nuevo."
+     # --- INICIO: Limpieza automática en caso de fallo (TEMPORALMENTE DESHABILITADA PARA DEBUG) ---
+     echo "ADVERTENCIA: La limpieza automática está deshabilitada temporalmente para permitir la inspección manual."
+     echo "Si deseas limpiar, ejecuta manualmente:"
+     echo "  sudo systemctl stop ${SERVICE_NAME}.service"
+     echo "  sudo systemctl disable ${SERVICE_NAME}.service"
+     echo "  sudo rm -rf $BOT_DIR"
+     echo "  sudo rm -f $SERVICE_FILE_PATH"
+     echo "  sudo systemctl daemon-reload"
+     # echo "Intentando limpiar la instalación fallida..."
+     # ... (comandos de limpieza comentados) ...
+     # echo "Limpieza automática completada. Por favor, revisa los errores e intenta la instalación de nuevo."
      # --- FIN: Limpieza automática en caso de fallo ---
 
      exit 1
