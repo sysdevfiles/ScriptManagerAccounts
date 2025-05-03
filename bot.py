@@ -57,6 +57,8 @@ def main() -> None:
     application.add_handler(CommandHandler("add", admin_handlers.add_account))
     application.add_handler(CommandHandler("adduser", admin_handlers.add_user))
     application.add_handler(CommandHandler("listusers", admin_handlers.list_users)) # También botón
+    application.add_handler(CommandHandler("listallaccounts", admin_handlers.list_all_accounts))
+    application.add_handler(CommandHandler("listassignments", admin_handlers.list_assignments))
 
     # Callback Handler (desde callback_handlers.py)
     application.add_handler(CallbackQueryHandler(callback_handlers.button_callback_handler))

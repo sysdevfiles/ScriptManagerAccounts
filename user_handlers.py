@@ -5,6 +5,7 @@ import os
 from dotenv import load_dotenv
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
+from telegram.constants import ParseMode # Asegúrate que ParseMode está importado
 
 # Importar funciones de base de datos y otros módulos necesarios
 import database as db
@@ -31,7 +32,14 @@ def get_main_menu_keyboard(is_admin: bool) -> InlineKeyboardMarkup:
         [InlineKeyboardButton("📋 Mis Cuentas", callback_data='list_accounts')],
     ]
     if is_admin:
+        # Añadimos más botones de admin en filas separadas
         keyboard.append([InlineKeyboardButton("🔑 Admin: Listar Usuarios", callback_data='admin_list_users')])
+        keyboard.append([InlineKeyboardButton("👤 Admin: Añadir Usuario", callback_data='admin_add_user_prompt')]) # Prompt para pedir datos
+        keyboard.append([InlineKeyboardButton("🧾 Admin: Listar Cuentas", callback_data='admin_list_all_accounts')])
+        keyboard.append([InlineKeyboardButton("➕ Admin: Añadir Cuenta", callback_data='admin_add_account_prompt')]) # Prompt para pedir datos
+        keyboard.append([InlineKeyboardButton("🔗 Admin: Listar Asignaciones", callback_data='admin_list_assignments')])
+        # Podrías añadir un botón para asignar, aunque /assign requiere IDs
+        # keyboard.append([InlineKeyboardButton("🤝 Admin: Asignar Cuenta", callback_data='admin_assign_account_prompt')])
     return InlineKeyboardMarkup(keyboard)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -76,163 +84,241 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Muestra la ayuda."""
-    user_id = update.effective_user.id
-    # Reemplazar también aquí
-    is_admin_user = (ADMIN_USER_ID is not None and user_id == ADMIN_USER_ID)
-    is_authorized = db.is_user_authorized(user_id) # Asignar directamente el booleano devuelto
+    logger.info(f"--- FUNCIÓN HELP INICIADA --- Update ID: {update.update_id}") # Log añadido
+    try:
+        user_id = update.effective_user.id
+        is_admin_user = (ADMIN_USER_ID is not None and user_id == ADMIN_USER_ID)
+        is_authorized = db.is_user_authorized(user_id) # Asignar directamente el booleano devuelto
 
-    help_text = "🤖 *Comandos Disponibles*\n\n"
-    help_text += "*/start* - Muestra el menú principal.\n"
-    help_text += "*/help* - Muestra esta ayuda.\n"
-    help_text += "*/status* - Verifica tu estado de acceso.\n"
+        help_text = "🤖 *Comandos Disponibles*\n\n"
+        help_text += "*/start* - Muestra el menú principal.\n"
+        help_text += "*/help* - Muestra esta ayuda.\n"
+        help_text += "*/status* - Verifica tu estado de acceso.\n"
 
-    if is_authorized or is_admin_user:
-        help_text += "\n*Comandos Autorizados:*\n"
-        help_text += "*/list* - Muestra tus perfiles asignados.\n"
-        help_text += "*/get* - Obtiene los detalles de tus perfiles (privado).\n"
+        if is_authorized or is_admin_user:
+            help_text += "\n*Comandos Autorizados:*\n"
+            help_text += "*/list* - Muestra tus perfiles asignados.\n"
+            # Quitamos /get de la ayuda pública por ahora, ya que se envía por privado
+            # help_text += "*/get* - Obtiene los detalles de tus perfiles (privado).\n"
+            help_text += "_Usa los botones o /list para ver tus cuentas._\n"
 
-    if is_admin_user:
-        help_text += "\n*Comandos de Administrador:*\n"
-        help_text += "`/add <servicio> <email> <perfil> <pin>` - Añade un perfil.\n"
-        help_text += "`/adduser <user_id> <nombre> <días>` - Autoriza/actualiza un usuario.\n"
-        help_text += "`/assign <user_id> <account_id>` - Asigna un perfil a un usuario.\n"
-        help_text += "`/listallaccounts` - Lista todos los perfiles con ID.\n"
-        help_text += "`/listusers` - Lista usuarios autorizados.\n"
-        help_text += "`/listassignments` - Lista todas las asignaciones.\n"
 
-    keyboard = get_main_menu_keyboard(is_admin_user)
-    await update.message.reply_text(help_text, parse_mode='MarkdownV2', reply_markup=keyboard)
+        if is_admin_user:
+            help_text += "\n*Comandos de Administrador:*\n"
+            # Usamos `backticks` para los comandos y parámetros
+            help_text += "`/add <servicio> <email> <perfil> <pin>` - Añade un perfil.\n"
+            help_text += "`/adduser <user_id> <nombre> <días>` - Autoriza/actualiza un usuario.\n"
+            help_text += "`/assign <user_id> <account_id>` - Asigna un perfil a un usuario.\n"
+            help_text += "`/listallaccounts` - Lista todos los perfiles con ID.\n"
+            help_text += "`/listusers` - Lista usuarios autorizados.\n"
+            help_text += "`/listassignments` - Lista todas las asignaciones.\n"
+            # Añadir comandos para eliminar/modificar si existen
+
+        keyboard = get_main_menu_keyboard(is_admin_user)
+        logger.info(f"Preparado para enviar mensaje de ayuda a user_id: {user_id}") # Log añadido
+        # Cambiado a ParseMode.MARKDOWN
+        await update.message.reply_text(help_text, parse_mode=ParseMode.MARKDOWN, reply_markup=keyboard)
+        logger.info(f"Mensaje de ayuda enviado a user_id: {user_id}") # Log añadido
+
+    except Exception as e:
+        logger.error(f"Error dentro de la función help_command: {e}", exc_info=True)
+        try:
+            await update.message.reply_text("Ocurrió un error al mostrar la ayuda.")
+        except Exception as send_error:
+            logger.error(f"No se pudo enviar mensaje de error de ayuda al usuario {user_id}: {send_error}")
+
 
 async def list_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """(Autorizados) Lista los servicios de streaming disponibles."""
     query = update.callback_query
+    user_id = None # Inicializar user_id
+    is_callback = False # Flag para saber si es callback
+
     if query:
         user_id = query.from_user.id
+        is_callback = True
+        await query.answer() # Responder al callback si existe
+    elif update.message:
+        user_id = update.message.from_user.id
     else:
-        user_id = update.effective_user.id
+        logger.warning("No se pudo determinar user_id en list_accounts")
+        return
 
-    if not db.is_user_authorized(user_id):
-        message = "No tienes permiso para ver la lista de cuentas."
-        if query:
-            await query.edit_message_text(text=message)
+    logger.info(f"list_accounts: user_id={user_id}, is_callback={is_callback}")
+
+    # Verificar autorización (usando el user_id obtenido)
+    is_admin_user = (ADMIN_USER_ID is not None and user_id == ADMIN_USER_ID)
+    if not db.is_user_authorized(user_id) and not is_admin_user: # Permitir al admin también
+        message = "⛔ No tienes permiso para ver la lista de cuentas."
+        if is_callback:
+            await query.edit_message_text(text=message, reply_markup=get_back_to_menu_keyboard()) # Añadir botón volver
         else:
             await update.message.reply_text(text=message)
         return
 
     try:
-        services = db.list_accounts_db()
-        if not services:
-            message = "No hay cuentas almacenadas todavía."
-        else:
-            services_escaped = [db.escape_markdown(s) for s in services]
-            services_text = "\n- ".join(services_escaped)
-            message = f"📄 Cuentas disponibles:\n- {services_text}\n\nUsa `/get <servicio>` para obtener detalles\\."
+        # Obtener las cuentas asignadas AL USUARIO ESPECÍFICO
+        assigned_accounts = db.get_assigned_accounts_for_user(user_id) # Necesitas esta función en database.py
 
-        if query:
-             await query.edit_message_text(text=message, parse_mode='MarkdownV2')
+        if not assigned_accounts:
+            message = "ℹ️ No tienes ninguna cuenta asignada todavía."
         else:
-            await update.message.reply_text(text=message, parse_mode='MarkdownV2')
+            accounts_text_list = []
+            for acc in assigned_accounts:
+                # Asumiendo que get_assigned_accounts_for_user devuelve una lista de diccionarios
+                # con claves como 'service', 'profile_name', etc.
+                service = acc.get('service', 'N/A')
+                profile = acc.get('profile_name', 'N/A')
+                # Escapar caracteres de Markdown
+                service_escaped = db.escape_markdown(service)
+                profile_escaped = db.escape_markdown(profile)
+                accounts_text_list.append(f"- {service_escaped} (Perfil: {profile_escaped})")
+
+            accounts_text = "\n".join(accounts_text_list)
+            message = f"📋 *Tus Cuentas Asignadas:*\n{accounts_text}\n\n_Para obtener el PIN, usa el comando /get_"
+
+        # Determinar el teclado a mostrar (menú principal o solo volver)
+        final_keyboard = get_back_to_menu_keyboard() if is_callback else get_main_menu_keyboard(is_admin_user)
+
+        if is_callback:
+             await query.edit_message_text(text=message, parse_mode=ParseMode.MARKDOWN, reply_markup=final_keyboard)
+        else:
+            await update.message.reply_text(text=message, parse_mode=ParseMode.MARKDOWN, reply_markup=final_keyboard)
 
     except Exception as e:
-        logger.error(f"Error al procesar list_accounts: {e}")
-        message = "Ocurrió un error al obtener la lista de cuentas."
-        if query:
-            await query.edit_message_text(text=message)
-        else:
-            await update.message.reply_text(text=message, parse_mode='MarkdownV2')
+        logger.error(f"Error al procesar list_accounts para {user_id}: {e}", exc_info=True)
+        message = "⚠️ Ocurrió un error al obtener la lista de cuentas."
+        if is_callback:
+            await query.edit_message_text(text=message, reply_markup=get_back_to_menu_keyboard())
+        elif update.message:
+            await update.message.reply_text(text=message)
 
+# --- Necesitas añadir get_back_to_menu_keyboard() y get_assigned_accounts_for_user() ---
+def get_back_to_menu_keyboard() -> InlineKeyboardMarkup:
+     """Genera un teclado con solo el botón de volver al menú."""
+     # Esta función debería estar preferiblemente en callback_handlers.py o un módulo de utilidades
+     # pero la ponemos aquí temporalmente para que funcione list_accounts
+     keyboard = [[InlineKeyboardButton("⬅️ Volver al Menú", callback_data='back_to_menu')]]
+     return InlineKeyboardMarkup(keyboard)
+
+# --- Modificar get_account para enviar PIN ---
 async def get_account(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """(Autorizados) Obtiene los detalles de una cuenta específica (comando)."""
+    """(Autorizados) Obtiene los detalles (PIN) de los perfiles asignados."""
     user_id = update.effective_user.id
-    if not db.is_user_authorized(user_id):
-        await update.message.reply_text("No tienes permiso para usar este comando.")
-        return
+    is_admin_user = (ADMIN_USER_ID is not None and user_id == ADMIN_USER_ID)
 
-    if len(context.args) != 1:
-        await update.message.reply_text("Uso: /get <servicio>")
+    if not db.is_user_authorized(user_id) and not is_admin_user:
+        await update.message.reply_text("⛔ No tienes permiso para usar este comando.")
         return
-
-    service_arg = context.args[0]
 
     try:
-        account = db.get_account_db(service_arg.capitalize())
-        if not account:
-             account = db.get_account_db(service_arg)
+        assigned_accounts = db.get_assigned_accounts_for_user(user_id) # Reutilizar la función
 
-        if account:
-            service_display = service_arg.capitalize()
-            username = account['username']
-            password = account['password']
-            try:
-                username_escaped = db.escape_markdown(username)
-                password_escaped = db.escape_markdown(password)
-                service_display_escaped = db.escape_markdown(service_display)
+        if not assigned_accounts:
+            await update.message.reply_text("ℹ️ No tienes ninguna cuenta asignada para obtener detalles.")
+            return
 
-                await context.bot.send_message(
-                    chat_id=update.effective_user.id,
-                    text=f"🔑 Detalles de la cuenta *{service_display_escaped}*:\n"
-                         f"Usuario: `{username_escaped}`\n"
-                         f"Contraseña: `{password_escaped}`",
-                    parse_mode='MarkdownV2'
-                )
-                if update.message.chat.type != 'private':
-                     await update.message.reply_text(f"✅ Te he enviado los detalles de *{service_display_escaped}* por mensaje privado.", parse_mode='MarkdownV2')
-                logger.info(f"Usuario {user_id} solicitó la cuenta: {service_display}")
-            except Exception as e:
-                logger.error(f"Error enviando mensaje privado a {user_id}: {e}")
-                await update.message.reply_text(
-                    "⚠️ No pude enviarte los detalles por privado. Asegúrate de haber iniciado una conversación conmigo."
-                )
-        else:
-            service_arg_escaped = db.escape_markdown(service_arg)
-            await update.message.reply_text(f"❌ No se encontró ninguna cuenta para el servicio: *{service_arg_escaped}*", parse_mode='MarkdownV2')
+        details_text_list = []
+        for acc in assigned_accounts:
+            service = acc.get('service', 'N/A')
+            profile = acc.get('profile_name', 'N/A')
+            pin = acc.get('pin', 'N/A') # Asumiendo que la función devuelve el PIN
+
+            # Escapar caracteres
+            service_escaped = db.escape_markdown(service)
+            profile_escaped = db.escape_markdown(profile)
+            pin_escaped = db.escape_markdown(pin) # Escapar el PIN también
+
+            details_text_list.append(
+                f"*{service_escaped}* (Perfil: {profile_escaped})\n PIN: `{pin_escaped}`"
+            )
+
+        details_text = "\n\n".join(details_text_list)
+        message = f"🔑 *Detalles de tus Perfiles Asignados:*\n\n{details_text}"
+
+        try:
+            # Enviar por mensaje privado
+            await context.bot.send_message(
+                chat_id=user_id,
+                text=message,
+                parse_mode=ParseMode.MARKDOWN
+            )
+            # Confirmar en el chat original si no es privado
+            if update.message.chat.type != 'private':
+                 await update.message.reply_text("✅ Te he enviado los detalles por mensaje privado.")
+            logger.info(f"Usuario {user_id} solicitó detalles con /get")
+
+        except Exception as e:
+            logger.error(f"Error enviando mensaje privado de /get a {user_id}: {e}", exc_info=True)
+            await update.message.reply_text(
+                "⚠️ No pude enviarte los detalles por privado. Asegúrate de haber iniciado una conversación conmigo y vuelve a intentarlo."
+            )
 
     except Exception as e:
-        logger.error(f"Error al procesar /get para {service_arg}: {e}")
-        await update.message.reply_text(" Ocurrió un error al buscar la cuenta.")
+        logger.error(f"Error al procesar /get para {user_id}: {e}", exc_info=True)
+        await update.message.reply_text("⚠️ Ocurrió un error al obtener los detalles de tus cuentas.")
+
 
 async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Muestra el estado de acceso del usuario (puede ser llamado por botón o comando)."""
     query = update.callback_query
+    user_id = None
+    is_callback = False
+
     if query:
         user_id = query.from_user.id
+        is_callback = True
+        await query.answer()
+    elif update.message:
+        user_id = update.message.from_user.id
     else:
-        user_id = update.effective_user.id
+        logger.warning("No se pudo determinar user_id en status_command")
+        return
+
+    logger.info(f"status_command: user_id={user_id}, is_callback={is_callback}")
 
     message = ""
-    user_name = "Usuario"
-    is_authorized = False
+    user_name = "Usuario" # Default name
 
-    if user_id == ADMIN_USER_ID:
-        message = "👑 Eres el administrador. Tienes acceso permanente."
-        is_authorized = True
+    # Comprobar si es admin
+    is_admin_user = (ADMIN_USER_ID is not None and user_id == ADMIN_USER_ID)
+
+    if is_admin_user:
+        message = "👑 Eres el *administrador*. Tienes acceso permanente."
     else:
         try:
-            user_status = db.get_user_status_db(user_id)
+            # Obtener estado del usuario normal
+            user_status = db.get_user_status_db(user_id) # Necesitas esta función en database.py
             if user_status:
                 user_name = user_status.get('name', user_name)
-                expiry_ts = user_status['expiry_ts']
-                current_ts = int(time.time())
-                expiry_date = datetime.fromtimestamp(expiry_ts).strftime('%d/%m/%Y')
+                expiry_ts = user_status.get('expiry_ts')
                 name_escaped = db.escape_markdown(user_name)
-                if current_ts <= expiry_ts:
-                    message = f"✅ Hola {name_escaped}. Tu acceso está activo hasta: *{expiry_date}*"
-                    is_authorized = True
+
+                if expiry_ts:
+                    current_ts = int(time.time())
+                    expiry_date = datetime.fromtimestamp(expiry_ts).strftime('%d/%m/%Y %H:%M') # Añadir hora
+                    if current_ts <= expiry_ts:
+                        message = f"✅ Hola {name_escaped}. Tu acceso está *activo* hasta: {expiry_date}"
+                    else:
+                        message = f"⏳ Hola {name_escaped}. Tu acceso *expiró* el: {expiry_date}"
                 else:
-                    message = f"⏳ Hola {name_escaped}. Tu acceso expiró el: *{expiry_date}*"
-                    is_authorized = False
+                    # Usuario existe pero sin fecha de expiración? Podría ser un estado inválido
+                    message = f"❓ Hola {name_escaped}. Tu estado de acceso es indeterminado. Contacta al admin."
             else:
                 message = "❌ No estás registrado como usuario autorizado."
-                is_authorized = False
         except Exception as e:
-            logger.error(f"Error al procesar status_command para {user_id}: {e}")
+            logger.error(f"Error al procesar status_command para {user_id}: {e}", exc_info=True)
             message = "⚠️ Ocurrió un error al verificar tu estado."
-            is_authorized = False
 
-    if query:
-        await query.edit_message_text(text=message, parse_mode='MarkdownV2')
-    else:
-        await update.message.reply_text(text=message, parse_mode='MarkdownV2')
+    # Determinar teclado
+    final_keyboard = get_back_to_menu_keyboard() if is_callback else get_main_menu_keyboard(is_admin_user)
+
+    # Enviar respuesta
+    if is_callback:
+        await query.edit_message_text(text=message, parse_mode=ParseMode.MARKDOWN, reply_markup=final_keyboard)
+    elif update.message:
+        await update.message.reply_text(text=message, parse_mode=ParseMode.MARKDOWN, reply_markup=final_keyboard)
+
 
 async def unknown(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Maneja comandos desconocidos."""

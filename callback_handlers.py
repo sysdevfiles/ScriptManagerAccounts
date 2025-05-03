@@ -3,10 +3,19 @@ from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import ContextTypes
 import os
 from dotenv import load_dotenv
+from telegram.constants import ParseMode # <--- AÑADIR ESTA LÍNEA
 
 # Importar funciones de base de datos y handlers específicos
 import database as db
 import user_handlers
+# Importar funciones específicas de admin_handlers que serán llamadas por botones
+from admin_handlers import (
+    list_users as admin_list_users_func,
+    list_all_accounts as admin_list_all_accounts_func,
+    list_assignments as admin_list_assignments_func
+    # Importa otras funciones si creas botones para ellas (add_user, add_account, etc.)
+    # Nota: Para añadir/asignar, es mejor guiar al usuario con mensajes que usar botones directos aquí
+)
 
 # Cargar ADMIN_USER_ID para comprobaciones
 load_dotenv()
@@ -43,6 +52,9 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
 
     # Determinar si el usuario está autorizado (para mostrar el menú correcto después)
     is_authorized = db.is_user_authorized(user_id)
+
+    # Comprobar si es admin directamente aquí para proteger las acciones
+    is_admin_user = (user_handlers.ADMIN_USER_ID is not None and user_id == user_handlers.ADMIN_USER_ID)
 
     # Redirigir a las funciones correspondientes
     if callback_data == CALLBACK_LIST_ACCOUNTS:
@@ -92,6 +104,30 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
              "Menú Principal:",
              reply_markup=keyboard
          )
+
+    # --- Nuevos Handlers para Admin ---
+    elif callback_data == 'admin_list_all_accounts':
+         if is_admin_user:
+             await admin_list_all_accounts_func(update, context) # Asumiendo que maneja query
+         else:
+             await query.edit_message_text(text="⛔ Acceso denegado.")
+    elif callback_data == 'admin_list_assignments':
+         if is_admin_user:
+             await admin_list_assignments_func(update, context) # Asumiendo que maneja query
+         else:
+             await query.edit_message_text(text="⛔ Acceso denegado.")
+    elif callback_data == 'admin_add_user_prompt':
+         if is_admin_user:
+             # Enviar mensaje guía en lugar de ejecutar directamente
+             await query.edit_message_text(text="Para añadir/actualizar un usuario, envía:\n`/adduser <ID_TELEGRAM> <NOMBRE> <DÍAS_ACCESO>`", parse_mode=ParseMode.MARKDOWN)
+         else:
+             await query.edit_message_text(text="⛔ Acceso denegado.")
+    elif callback_data == 'admin_add_account_prompt':
+         if is_admin_user:
+             # Enviar mensaje guía
+             await query.edit_message_text(text="Para añadir una cuenta, envía:\n`/add <SERVICIO> <EMAIL> <PERFIL> <PIN>`", parse_mode=ParseMode.MARKDOWN)
+         else:
+             await query.edit_message_text(text="⛔ Acceso denegado.")
 
     else:
         logger.warning(f"Callback data no reconocido: {callback_data}")
