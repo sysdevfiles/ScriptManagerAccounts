@@ -28,6 +28,11 @@ GITHUB_REPO_URL="https://github.com/sysdevfiles/ScriptManagerAccounts.git"
 
 echo "--- Iniciando Instalación del Bot Gestor de Cuentas para el usuario '$CURRENT_USER' ---"
 echo "Directorio de instalación: $BOT_DIR"
+# Verificar si USER_HOME es válido
+if [ ! -d "$USER_HOME" ]; then
+    echo "ERROR: El directorio home '$USER_HOME' para el usuario '$CURRENT_USER' no existe o no es accesible."
+    exit 1
+fi
 
 # --- 0. Limpieza Opcional ---
 if [ -d "$BOT_DIR" ] || [ -f "/etc/systemd/system/${SERVICE_NAME}.service" ]; then
@@ -87,18 +92,27 @@ echo "Ejemplo con nano para crear .env: sudo -u $CURRENT_USER nano $BOT_DIR/.env
 echo "Asegúrate de que el archivo .env tenga permisos de lectura para '$CURRENT_USER'."
 echo "Ejemplo: sudo chown $CURRENT_USER:$CURRENT_USER $BOT_DIR/.env && sudo chmod 600 $BOT_DIR/.env"
 echo "---------------------------------------------------------------------"
+ENV_FILE_PATH="$BOT_DIR/.env" # Definir ruta explícita
 while true; do
-    read -p "Presiona Enter cuando hayas creado/verificado el archivo .env..."
+    read -p "Presiona Enter cuando hayas creado/verificado el archivo .env en $ENV_FILE_PATH..."
     # Verificar si .env existe
-    if [ -f "$BOT_DIR/.env" ]; then
-        # Asegurar permisos correctos para .env
-        echo "Verificando permisos de .env..."
-        sudo chown "$CURRENT_USER:$CURRENT_USER" "$BOT_DIR/.env"
-        sudo chmod 600 "$BOT_DIR/.env" # Solo lectura/escritura para el propietario
-        echo "Archivo .env detectado y permisos ajustados. Continuando..."
+    if [ -f "$ENV_FILE_PATH" ]; then
+        # Asegurar permisos correctos para .env ANTES de configurar systemd
+        echo "Verificando permisos de $ENV_FILE_PATH..."
+        # Cambiar propietario primero
+        chown "$CURRENT_USER:$CURRENT_USER" "$ENV_FILE_PATH"
+        if [ $? -ne 0 ]; then
+             echo "ADVERTENCIA: No se pudo cambiar el propietario de $ENV_FILE_PATH. Verifica los permisos manualmente."
+        fi
+         # Establecer permisos (600: lectura/escritura solo para propietario)
+        chmod 600 "$ENV_FILE_PATH"
+         if [ $? -ne 0 ]; then
+             echo "ADVERTENCIA: No se pudo cambiar los permisos de $ENV_FILE_PATH a 600. Verifica manualmente."
+        fi
+        echo "Archivo .env detectado y permisos ajustados (propietario: $CURRENT_USER, modo: 600). Continuando..."
         break
     else
-        echo "ERROR: Faltan el archivo .env en $BOT_DIR. Por favor, créalo."
+        echo "ERROR: Faltan el archivo .env en $ENV_FILE_PATH. Por favor, créalo."
     fi
 done
 
@@ -123,10 +137,13 @@ fi
 
 # --- 7. Configurar systemd ---
 echo "[6/8] Configurando servicio systemd ($SERVICE_NAME.service)..."
+SERVICE_FILE_PATH="/etc/systemd/system/${SERVICE_NAME}.service"
 
 # Crear el archivo de servicio
-# Usar barras diagonales escapadas en las rutas dentro del bloque cat
-cat << EOF > /etc/systemd/system/${SERVICE_NAME}.service
+# Asegurarse que las variables $CURRENT_USER, $BOT_DIR, $ENV_FILE_PATH tienen valores correctos aquí
+echo "Generando $SERVICE_FILE_PATH con User=$CURRENT_USER y WorkingDirectory=$BOT_DIR..."
+
+cat << EOF > "$SERVICE_FILE_PATH"
 [Unit]
 Description=Telegram Account Manager Bot (user $CURRENT_USER)
 After=network.target
@@ -137,39 +154,57 @@ Group=$(id -gn $CURRENT_USER) # Usar el grupo principal del usuario
 WorkingDirectory=$BOT_DIR
 # Usar la ruta completa al python del venv
 ExecStart=$BOT_DIR/venv/bin/python $BOT_DIR/bot.py
-Restart=on-failure # Reiniciar solo si falla
+Restart=on-failure
 RestartSec=5
-EnvironmentFile=$BOT_DIR/.env # Cargar variables de entorno desde .env
+# Usar la ruta absoluta verificada para EnvironmentFile
+EnvironmentFile=$ENV_FILE_PATH
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
 if [ $? -ne 0 ]; then
-    echo "ERROR: Falló la creación del archivo de servicio systemd."
+    echo "ERROR: Falló la creación del archivo de servicio systemd en $SERVICE_FILE_PATH."
     exit 1
 fi
+echo "Archivo $SERVICE_FILE_PATH creado."
+# Opcional: Mostrar contenido para depuración
+# echo "Contenido de $SERVICE_FILE_PATH:"
+# cat "$SERVICE_FILE_PATH"
+# echo "------------------------------------"
 
 # --- 8. Iniciar Servicio ---
 echo "[7/8] Recargando systemd y habilitando el servicio..."
 systemctl daemon-reload
 systemctl enable ${SERVICE_NAME}.service
 
-echo "[8/8] Iniciando el servicio del bot..."
+echo "[8/8] Iniciando el servicio del bot (usando restart)..."
 systemctl restart ${SERVICE_NAME}.service # Usar restart para asegurar que toma la nueva config
 
-# Esperar un poco y verificar el estado
-sleep 3
+echo "Esperando 5 segundos para que el servicio se estabilice..."
+sleep 5
+
+# Verificar estado final
+echo "Verificando estado final del servicio..."
+systemctl status ${SERVICE_NAME}.service --no-pager # Mostrar estado sin paginación
 SERVICE_STATUS=$(systemctl is-active ${SERVICE_NAME}.service)
-echo "Estado del servicio: $SERVICE_STATUS"
+echo "Estado actual del servicio: $SERVICE_STATUS"
 
 if [ "$SERVICE_STATUS" != "active" ]; then
-     echo "ADVERTENCIA: El servicio no se inició correctamente. Revisa los logs."
-     echo "Comandos útiles:"
-     echo "  Ver estado: sudo systemctl status ${SERVICE_NAME}.service"
-     echo "  Ver logs: sudo journalctl -u ${SERVICE_NAME}.service -f -n 50" # Muestra las últimas 50 líneas y sigue
-     echo "  Reiniciar: sudo systemctl restart ${SERVICE_NAME}.service"
-     echo "  Detener: sudo systemctl stop ${SERVICE_NAME}.service"
+     echo "---------------------------------------------------------------------"
+     echo "ERROR: El servicio '$SERVICE_NAME' no está activo."
+     echo "Posibles causas:"
+     echo "  - Error en el código del bot (revisa los logs)."
+     echo "  - Problema con el archivo .env (ruta o permisos)."
+     echo "  - Problema con el archivo .service (sintaxis, rutas)."
+     echo "Comandos útiles para diagnosticar:"
+     echo "  1. Ver estado detallado: sudo systemctl status ${SERVICE_NAME}.service"
+     echo "  2. Ver últimos logs: sudo journalctl -u ${SERVICE_NAME}.service -n 50 --no-pager"
+     echo "  3. Seguir logs en tiempo real: sudo journalctl -u ${SERVICE_NAME}.service -f"
+     echo "  4. Verificar archivo .env: ls -l $ENV_FILE_PATH"
+     echo "  5. Verificar archivo service: cat $SERVICE_FILE_PATH"
+     echo "  6. Reiniciar servicio después de corregir: sudo systemctl restart ${SERVICE_NAME}.service"
+     echo "---------------------------------------------------------------------"
      exit 1
 fi
 
