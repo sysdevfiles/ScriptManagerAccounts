@@ -252,3 +252,119 @@ async def list_all_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             await query.edit_message_text(text=error_message, reply_markup=final_keyboard)
         elif update.message:
             await update.message.reply_text(text=error_message, reply_markup=final_keyboard)
+
+@admin_required
+async def assign_account(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """(Admin) Asigna un perfil de cuenta a un usuario."""
+    if len(context.args) != 2:
+        await update.message.reply_text("Uso: /assign <user_id> <account_id>")
+        return
+
+    try:
+        target_user_id = int(context.args[0])
+        account_id = int(context.args[1])
+
+        # Verificar si el usuario existe y está autorizado (opcional pero recomendado)
+        if not db.is_user_authorized(target_user_id):
+             # Podríamos permitir asignar a usuarios no autorizados, pero avisamos
+             logger.warning(f"Intentando asignar cuenta a usuario no autorizado o inexistente: {target_user_id}")
+             # await update.message.reply_text(f"⚠️ Advertencia: El usuario {target_user_id} no está autorizado o no existe.")
+             # return # Descomentar si se quiere bloquear la asignación
+
+        # Llamar a la función de la base de datos
+        success = db.assign_account_to_user(target_user_id, account_id) # Necesitas esta función en database.py
+
+        if success:
+            # Obtener nombres para un mensaje más claro (opcional)
+            user_info = db.get_user_status_db(target_user_id)
+            account_info = db.get_account_details_by_id(account_id) # Necesitas esta función en database.py
+            user_name = user_info.get('name', f'ID {target_user_id}') if user_info else f'ID {target_user_id}'
+            account_desc = f"{account_info['service']} ({account_info['profile_name']})" if account_info else f'ID {account_id}'
+
+            user_name_escaped = db.escape_markdown(user_name)
+            account_desc_escaped = db.escape_markdown(account_desc)
+
+            await update.message.reply_text(
+                f"✅ Cuenta *{account_desc_escaped}* asignada correctamente al usuario *{user_name_escaped}*.",
+                parse_mode=ParseMode.MARKDOWN
+            )
+        else:
+            # El error específico (usuario/cuenta no existe, ya asignado) se maneja en db.assign_account_to_user
+            # La función db debe loggear el error específico. Aquí damos mensaje genérico.
+             await update.message.reply_text(f"❌ No se pudo asignar la cuenta. Verifica que el User ID y el Account ID sean válidos y que la asignación no exista ya.")
+
+    except ValueError:
+        await update.message.reply_text("Error: El user_id y el account_id deben ser números.")
+    except Exception as e:
+        logger.error(f"Error al procesar /assign: {e}", exc_info=True)
+        await update.message.reply_text("Ocurrió un error inesperado al asignar la cuenta.")
+
+@admin_required
+async def list_assignments(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """(Admin) Lista todas las asignaciones de cuentas a usuarios."""
+    query = update.callback_query
+    is_callback = bool(query)
+    user_id = update.effective_user.id # Ya verificado por @admin_required
+
+    logger.info(f"list_assignments: user_id={user_id}, is_callback={is_callback}")
+
+    if is_callback:
+        await query.answer()
+
+    try:
+        all_assignments = db.get_all_assignments() # Necesitas esta función en database.py
+
+        if not all_assignments:
+            message = "ℹ️ No hay ninguna asignación registrada."
+        else:
+            assignments_text_list = ["🔗 *Todas las Asignaciones:*"]
+            # Ordenar o agrupar para mejor legibilidad, por ejemplo por usuario
+            all_assignments.sort(key=lambda x: (x.get('user_name', x.get('user_id')), x.get('service', ''), x.get('profile_name', '')))
+
+            current_user_id = None
+            for assign in all_assignments:
+                assign_user_id = assign.get('user_id')
+                user_name = assign.get('user_name', f'ID {assign_user_id}')
+                account_id = assign.get('account_id')
+                service = assign.get('service', 'N/A')
+                profile = assign.get('profile_name', 'N/A')
+
+                # Escapar
+                user_name_escaped = db.escape_markdown(user_name)
+                service_escaped = db.escape_markdown(service)
+                profile_escaped = db.escape_markdown(profile)
+
+                # Agrupar por usuario
+                if assign_user_id != current_user_id:
+                    assignments_text_list.append(f"\n👤 *Usuario:* {user_name_escaped} (`{assign_user_id}`)")
+                    current_user_id = assign_user_id
+
+                assignments_text_list.append(
+                    f"  - Cuenta ID `{account_id}`: {service_escaped} ({profile_escaped})"
+                )
+
+            message = "\n".join(assignments_text_list)
+
+        # Determinar teclado
+        final_keyboard = get_back_to_menu_keyboard() if is_callback else get_user_main_menu(True)
+
+        # Enviar respuesta
+        if is_callback:
+            # Dividir mensaje si es muy largo para edición
+            max_length = 4096
+            await query.edit_message_text(text=message[:max_length], parse_mode=ParseMode.MARKDOWN, reply_markup=final_keyboard)
+        elif update.message:
+            # Dividir mensaje si es muy largo para envío
+            max_length = 4096
+            for i in range(0, len(message), max_length):
+                await update.message.reply_text(text=message[i:i+max_length], parse_mode=ParseMode.MARKDOWN, reply_markup=final_keyboard)
+
+
+    except Exception as e:
+        logger.error(f"Error al procesar list_assignments para {user_id}: {e}", exc_info=True)
+        error_message = "⚠️ Ocurrió un error al obtener la lista de asignaciones."
+        final_keyboard = get_back_to_menu_keyboard() if is_callback else get_user_main_menu(True)
+        if is_callback:
+            await query.edit_message_text(text=error_message, reply_markup=final_keyboard)
+        elif update.message:
+            await update.message.reply_text(text=error_message, reply_markup=final_keyboard)
