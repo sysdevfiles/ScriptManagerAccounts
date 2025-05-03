@@ -142,80 +142,53 @@ Si estás reinstalando el bot y ya tenías una versión anterior configurada (es
     *El bot debería iniciarse. Puedes detenerlo con `Ctrl+C`. Se creará el archivo `accounts.db`.*
 
 8.  **Ejecutar en segundo plano (Producción):**
-    Para que el bot siga funcionando después de cerrar la sesión SSH y se reinicie automáticamente si falla, se recomienda usar `systemd`.
+    Para que el bot siga funcionando después de cerrar la sesión SSH y se reinicie automáticamente si falla o si el servidor se reinicia, **se recomienda encarecidamente usar `systemd`**. El script `install.sh` configura esto automáticamente.
 
-    **Método Recomendado: `systemd`**
+    **Método Recomendado: `systemd` (Configurado por `install.sh`)**
 
-    a.  **Crea un archivo de servicio:**
-        Usa `nano` o tu editor preferido para crear el archivo `/etc/systemd/system/telegrambot.service`. **Reemplaza `<tu_usuario>` con tu nombre de usuario real en el VPS** en las líneas `User`, `Group`, `WorkingDirectory` y `ExecStart`.
+    El script `install.sh` crea y configura un servicio llamado `telegrambot.service`.
 
-        ```bash
-        sudo nano /etc/systemd/system/telegrambot.service
-        ```
-
-        Pega el siguiente contenido en el editor:
-
-        ```ini
-        [Unit]
-        Description=Telegram Account Manager Bot
-        After=network.target
-
-        [Service]
-        User=<tu_usuario>
-        Group=<tu_usuario> # O el grupo principal de tu usuario
-        WorkingDirectory=/home/<tu_usuario>/telegram_bot
-        # Asegúrate que la ruta al ejecutable python dentro del venv es correcta
-        ExecStart=/home/<tu_usuario>/telegram_bot/venv/bin/python bot.py
-        Restart=always # Reinicia el bot si falla
-        RestartSec=3   # Espera 3 segundos antes de reiniciar
-
-        [Install]
-        WantedBy=multi-user.target
-        ```
-        *Guarda y cierra el editor (en `nano`, `Ctrl+X`, luego `Y`, luego `Enter`).*
-
-    b.  **Recarga `systemd`:** Para que reconozca el nuevo servicio.
-        ```bash
-        sudo systemctl daemon-reload
-        ```
-
-    c.  **Habilita el servicio:** Para que se inicie automáticamente al arrancar el VPS.
+    a.  **Asegúrate de que el script de instalación se ejecutó correctamente.**
+    b.  **Habilita el servicio (si no lo hizo el script):** Para que se inicie automáticamente al arrancar el VPS.
         ```bash
         sudo systemctl enable telegrambot.service
         ```
-
-    d.  **Inicia el servicio:**
+    c.  **Inicia o Reinicia el servicio:**
         ```bash
+        # Para iniciar por primera vez o si estaba detenido:
         sudo systemctl start telegrambot.service
+        # Para aplicar cambios o reiniciar si ya corría:
+        sudo systemctl restart telegrambot.service
         ```
-
-    e.  **Verifica el estado:**
+    d.  **Verifica el estado:**
         ```bash
         sudo systemctl status telegrambot.service
         ```
-        *Deberías ver `active (running)`. Presiona `q` para salir.*
-
-    f.  **Ver los logs:** `systemd` captura la salida del bot.
+        *Deberías ver `active (running)`. Presiona `q` para salir. Ahora puedes cerrar tu sesión SSH.*
+    e.  **Ver los logs:** `systemd` captura la salida del bot.
         ```bash
+        # Ver los últimos logs:
+        sudo journalctl -u telegrambot.service -n 50 --no-pager
+        # Seguir los logs en tiempo real:
         sudo journalctl -u telegrambot.service -f
         ```
-        *Usa `-f` para seguir los logs en tiempo real. `Ctrl+C` para detener.*
+        *Usa `Ctrl+C` para detener el seguimiento.*
+    f.  **Otros comandos útiles:**
+        *   `sudo systemctl stop telegrambot.service`: Detiene el bot.
+        *   `sudo systemctl disable telegrambot.service`: Evita que el bot inicie automáticamente al arrancar.
 
-    *   **Para detener el servicio:** `sudo systemctl stop telegrambot.service`
-    *   **Para reiniciar el servicio:** `sudo systemctl restart telegrambot.service`
-    *   **Para deshabilitar el inicio automático:** `sudo systemctl disable telegrambot.service`
+    **Alternativas Simples (Menos Robustas):**
 
-    **Alternativa Simple: `nohup`**
+    Si prefieres no usar `systemd` (no recomendado para producción), puedes usar `nohup` o `screen`/`tmux`.
 
-    Si prefieres una solución más rápida pero menos robusta (sin reinicio automático):
+    *   **`nohup`:** Ejecuta el bot en segundo plano, ignorando la señal de cierre de sesión. La salida se guarda en `bot.log`. No se reinicia automáticamente.
+        ```bash
+        # En el directorio del bot, con venv activado:
+        nohup python bot.py > bot.log 2>&1 &
+        ```
+        *Para detenerlo, busca su ID de proceso (`ps aux | grep bot.py`) y usa `kill <PID>`.*
 
-    ```bash
-    # Asegúrate de estar en el directorio del bot y con el venv activado
-    # cd ~/telegram_bot
-    # source venv/bin/activate
-    nohup python bot.py > bot.log 2>&1 &
-    ```
-    *Esto ejecuta el bot en segundo plano y guarda la salida en `bot.log`. Para detenerlo, busca su ID de proceso (`ps aux | grep bot.py`) y usa `kill <PID>`.*
+    *   **`screen` / `tmux`:** Multiplexores de terminal. Creas una sesión, ejecutas el bot, te desconectas de la sesión dejándola activa. Tampoco se reinicia automáticamente. Busca tutoriales de `screen` o `tmux` si te interesa esta opción.
 
 9.  **Firewall:** Asegúrate de que el firewall de tu VPS (si está activo, ej. `ufw`) permite las conexiones salientes en el puerto 443/TCP para que el bot pueda comunicarse con la API de Telegram. Normalmente, las reglas por defecto permiten el tráfico saliente.
 
