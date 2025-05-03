@@ -10,9 +10,8 @@ from telegram.constants import ParseMode # Importar ParseMode
 # Importar funciones de base de datos y otros módulos necesarios
 import database as db
 # Importar selectivamente para evitar dependencia circular completa
-from user_handlers import get_main_menu_keyboard
+from user_handlers import get_main_menu_keyboard, get_back_to_menu_keyboard
 from user_handlers import ADMIN_USER_ID # Asumiendo que está definido en user_handlers
-from callback_handlers import get_back_to_menu_keyboard # Para el botón de volver
 
 # Cargar ADMIN_USER_ID para comprobaciones
 load_dotenv()
@@ -232,8 +231,7 @@ async def list_all_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         # Determinar teclado
         # Usamos get_main_menu_keyboard de user_handlers para comandos
         # y get_back_to_menu_keyboard de callback_handlers para callbacks
-        from user_handlers import get_main_menu_keyboard as get_user_main_menu # Evitar conflicto nombres
-        final_keyboard = get_back_to_menu_keyboard() if is_callback else get_user_main_menu(True) # True porque es admin
+        final_keyboard = get_back_to_menu_keyboard() if is_callback else get_main_menu_keyboard(True) # True porque es admin
 
         # Enviar respuesta
         if is_callback:
@@ -252,7 +250,7 @@ async def list_all_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     except Exception as e:
         logger.error(f"Error al procesar list_all_accounts para {user_id}: {e}", exc_info=True)
         error_message = "⚠️ Ocurrió un error al obtener la lista completa de cuentas."
-        final_keyboard = get_back_to_menu_keyboard() if is_callback else get_user_main_menu(True)
+        final_keyboard = get_back_to_menu_keyboard() if is_callback else get_main_menu_keyboard(True)
         if is_callback:
             await query.edit_message_text(text=error_message, reply_markup=final_keyboard)
         elif update.message:

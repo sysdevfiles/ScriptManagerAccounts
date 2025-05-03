@@ -23,7 +23,7 @@ else:
 
 logger = logging.getLogger(__name__)
 
-# --- Funciones de Comandos de Usuario ---
+# --- Funciones de Teclados ---
 
 def get_main_menu_keyboard(is_admin: bool) -> InlineKeyboardMarkup:
     """Genera el teclado del menú principal según el rol del usuario."""
@@ -41,6 +41,15 @@ def get_main_menu_keyboard(is_admin: bool) -> InlineKeyboardMarkup:
         # Podrías añadir un botón para asignar, aunque /assign requiere IDs
         # keyboard.append([InlineKeyboardButton("🤝 Admin: Asignar Cuenta", callback_data='admin_assign_account_prompt')])
     return InlineKeyboardMarkup(keyboard)
+
+# --- NUEVA UBICACIÓN PARA ESTA FUNCIÓN ---
+def get_back_to_menu_keyboard() -> InlineKeyboardMarkup:
+     """Genera un teclado con solo el botón de volver al menú."""
+     # El callback_data 'back_to_menu' será manejado en callback_handlers.py
+     keyboard = [[InlineKeyboardButton("⬅️ Volver al Menú", callback_data='back_to_menu')]]
+     return InlineKeyboardMarkup(keyboard)
+
+# --- Funciones de Comandos de Usuario ---
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Envía un mensaje de bienvenida con el menú principal."""
@@ -192,14 +201,6 @@ async def list_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             await query.edit_message_text(text=message, reply_markup=get_back_to_menu_keyboard())
         elif update.message:
             await update.message.reply_text(text=message)
-
-# --- Necesitas añadir get_back_to_menu_keyboard() y get_assigned_accounts_for_user() ---
-def get_back_to_menu_keyboard() -> InlineKeyboardMarkup:
-     """Genera un teclado con solo el botón de volver al menú."""
-     # Esta función debería estar preferiblemente en callback_handlers.py o un módulo de utilidades
-     # pero la ponemos aquí temporalmente para que funcione list_accounts
-     keyboard = [[InlineKeyboardButton("⬅️ Volver al Menú", callback_data='back_to_menu')]]
-     return InlineKeyboardMarkup(keyboard)
 
 # --- Modificar get_account para enviar PIN ---
 async def get_account(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
