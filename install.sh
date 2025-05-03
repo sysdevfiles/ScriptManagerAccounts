@@ -1,16 +1,27 @@
 #!/bin/bash
 
 # Script de instalación para el Bot Gestor de Cuentas en Ubuntu 20.04+
-# Ejecutar con: sudo bash install.sh
+# Ejecutar con: sudo bash install.sh (DESDE UNA CUENTA DE USUARIO NO ROOT)
+
+# --- Verificación de Usuario ---
+if [ "$(id -u)" -ne 0 ]; then
+  echo "ERROR: Este script debe ejecutarse con sudo." >&2
+  echo "Ejemplo: sudo bash install.sh" >&2
+  exit 1
+fi
+
+if [ -z "$SUDO_USER" ] || [ "$SUDO_USER" == "root" ]; then
+  echo "ERROR: Por favor, ejecuta este script usando 'sudo' desde una cuenta de usuario NO root." >&2
+  echo "       No ejecutes este script directamente como usuario root o usando 'sudo su'." >&2
+  echo "       1. Sal de la sesión root (exit)" >&2
+  echo "       2. Loguéate como tu usuario normal" >&2
+  echo "       3. Ejecuta: sudo bash install.sh" >&2
+  exit 1
+fi
 
 # --- Variables (Ajustar si es necesario) ---
-# Obtener el nombre de usuario que inició la sesión (incluso con sudo)
-# Si logname no funciona, intentar con $SUDO_USER o pedir al usuario
-if [ -z "$SUDO_USER" ]; then
-    CURRENT_USER=$(logname 2>/dev/null || echo $USER)
-else
-    CURRENT_USER=$SUDO_USER
-fi
+# Usar $SUDO_USER como el usuario objetivo
+CURRENT_USER=$SUDO_USER
 
 # Determinar el directorio home del usuario
 USER_HOME=$(getent passwd "$CURRENT_USER" | cut -d: -f6)
