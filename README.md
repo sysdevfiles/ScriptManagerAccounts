@@ -1,31 +1,31 @@
-# Gestor de Cuentas de Streaming para Telegram (Modelo Asignación)
+# Gestor de Cuentas de Streaming para Telegram (Modelo Usuario Añade Cuentas)
 
-Este es un bot de Telegram simple, escrito en Python, diseñado para gestionar el acceso a **perfiles específicos** dentro de cuentas de servicios de streaming (como Netflix, HBO Max, Spotify, etc.). Utiliza una base de datos SQLite para almacenar la información de forma persistente. **El administrador añade los perfiles y luego los asigna a usuarios autorizados.**
+Este es un bot de Telegram simple, escrito en Python, diseñado para que **usuarios autorizados** gestionen el acceso a **sus propios perfiles** de servicios de streaming (como Netflix, HBO Max, Spotify, etc.). Utiliza una base de datos SQLite para almacenar la información de forma persistente. Las cuentas añadidas por los usuarios tienen una **validez de 30 días** desde su registro.
 
 **Nota de Seguridad Importante:** Este bot almacena los PIN de los perfiles en texto plano en la base de datos SQLite. Esto **no es seguro** para entornos de producción o información sensible real. Úsalo bajo tu propio riesgo. Además, compartir cuentas puede violar los Términos de Servicio de las plataformas.
 
 ## Características
 
-*   **Almacenamiento Persistente:** Guarda perfiles de cuentas, usuarios autorizados y sus asignaciones en una base de datos SQLite (`accounts.db`).
-*   **Modelo de Asignación:** El administrador registra perfiles individuales (Servicio, Email, Nombre Perfil, PIN) y luego los asigna a usuarios específicos de Telegram.
-*   **Acceso Controlado:** Los usuarios autorizados solo pueden ver y obtener detalles de los perfiles que les han sido asignados.
-*   **Acceso Temporal:** El administrador define por cuántos días un usuario tiene acceso.
+*   **Almacenamiento Persistente:** Guarda perfiles de cuentas (vinculados a usuarios), usuarios autorizados en una base de datos SQLite (`accounts.db`).
+*   **Modelo de Usuario Añade Cuentas:** Los usuarios autorizados por el administrador pueden añadir sus propios perfiles (Servicio, Email, Nombre Perfil, PIN) a través de un proceso interactivo.
+*   **Caducidad de Cuentas:** Cada perfil añadido por un usuario tiene una validez de 30 días desde el momento de su registro. Después de ese tiempo, dejará de aparecer en sus listas y no podrá obtener sus detalles.
+*   **Autorización de Usuarios:** El administrador controla qué usuarios pueden usar el bot y por cuánto tiempo (caducidad general del usuario).
+*   **Acceso Controlado:** Los usuarios solo pueden ver y obtener detalles de los perfiles que ellos mismos han añadido y que aún están activos (no caducados).
 *   **Comandos de Usuario (Autorizado):**
-    *   `/list`: Muestra los perfiles que tiene asignados.
-    *   `/get`: Obtiene los detalles (Perfil/PIN) de sus perfiles asignados (enviado por mensaje privado).
+    *   `/list`: Muestra los perfiles propios que están activos.
+    *   `/get`: Obtiene los detalles (Email/Perfil/PIN) de sus perfiles activos (enviado por mensaje privado).
+    *   `/addmyaccount`: Inicia un proceso interactivo para añadir un nuevo perfil propio.
 *   **Comandos de Usuario (Todos):**
-    *   `/start`: Mensaje de bienvenida.
+    *   `/start`: Mensaje de bienvenida y menú principal.
     *   `/help`: Muestra la ayuda (comandos varían según autorización).
-    *   `/status`: Verifica si su acceso está activo y hasta cuándo.
+    *   `/status`: Verifica si su permiso general para usar el bot está activo y hasta cuándo.
 *   **Comandos de Administrador:**
-    *   `/add <servicio> <email> <perfil> <pin>`: Añade un nuevo perfil de cuenta a la base de datos.
-    *   `/adduser <user_id> <nombre> <días>`: Registra o actualiza un usuario autorizado y su tiempo de acceso.
-    *   `/assign <user_id> <account_id>`: Asigna un perfil (identificado por su `account_id`) a un usuario.
-    *   `/listallaccounts`: Muestra todos los perfiles registrados con sus `account_id`.
-    *   `/listusers`: Muestra todos los usuarios registrados y el estado de su acceso.
-    *   `/listassignments`: Muestra qué usuario tiene asignado qué perfil.
+    *   `/adduser <user_id> <nombre> <días>`: Autoriza/actualiza un usuario para usar el bot y define la caducidad de su permiso general.
+    *   `/listusers`: Muestra todos los usuarios registrados y el estado de su permiso general.
+    *   `/listallaccounts`: Muestra todos los perfiles registrados en el sistema (de todos los usuarios), indicando el dueño y la fecha de caducidad de cada perfil.
+*   **Interfaz Interactiva:** Uso de conversaciones y borrado automático de mensajes para una experiencia más limpia.
 *   **Configuración Fácil:** Mediante un archivo `.env`.
-*   **Estructura Modular:** Código organizado en `bot.py`, `handlers.py`, `database.py`.
+*   **Estructura Modular:** Código organizado en `bot.py`, `user_handlers.py`, `admin_handlers.py`, `callback_handlers.py`, `database.py`, `utils.py`.
 
 ## Instalación y Ejecución (Enfoque en VPS)
 
@@ -241,29 +241,27 @@ Si deseas probar el bot en tu máquina local antes de desplegarlo:
 
 **Comandos para Todos:**
 
-*   `/start`: Inicia la conversación.
+*   `/start`: Inicia la conversación y muestra el menú.
 *   `/help`: Muestra la lista de comandos disponibles según tu nivel de acceso.
-*   `/status`: Verifica si tienes acceso autorizado y hasta qué fecha.
+*   `/status`: Verifica si tienes permiso para usar el bot y hasta qué fecha.
 
-**Comandos para Usuarios Autorizados:**
+**Comandos para Usuarios Autorizados (No Admin):**
 
-*   `/list`: Muestra un resumen de los perfiles de cuenta que te han sido asignados.
-*   `/get`: Te envía por privado los detalles (Nombre del Perfil y PIN) de todos los perfiles que tienes asignados.
+*   `/list`: Muestra un resumen de los perfiles propios que has añadido y están activos.
+*   `/get`: Te envía por privado los detalles (Email, Perfil y PIN) de tus perfiles activos.
+*   `/addmyaccount`: Inicia el proceso interactivo para añadir un nuevo perfil (tendrá 30 días de validez).
 
 **Comandos Solo para Administrador:**
 
-*   `/add <servicio> <email_cuenta> <nombre_perfil> <pin>`: Registra un nuevo perfil en la base de datos.
-*   `/adduser <user_id_telegram> <nombre_usuario> <días_acceso>`: Autoriza a un usuario de Telegram por un número determinado de días.
-*   `/listallaccounts`: Muestra todos los perfiles registrados en el sistema, incluyendo su `account_id` único (necesario para asignar).
-*   `/assign <user_id_telegram> <account_id>`: Asigna un perfil específico (usando su `account_id` de `/listallaccounts`) a un usuario autorizado.
-*   `/listusers`: Muestra todos los usuarios que han sido autorizados, junto con la fecha de expiración de su acceso.
-*   `/listassignments`: Muestra una lista completa de qué usuario tiene asignado qué perfil.
+*   `/adduser <user_id_telegram> <nombre_usuario> <días_acceso>`: Autoriza a un usuario de Telegram para usar el bot por un número determinado de días.
+*   `/listusers`: Muestra todos los usuarios autorizados y la fecha de expiración de su permiso.
+*   `/listallaccounts`: Muestra todos los perfiles registrados por todos los usuarios, incluyendo su `ID` único, dueño y fecha de caducidad.
 
 ## Próximos Pasos / Mejoras Posibles
-
 *   **Cifrado de PINs:** Implementar cifrado para el PIN en la base de datos.
-*   **Eliminar Asignaciones/Usuarios/Cuentas:** Añadir comandos de administrador para borrar registros.
-*   **Modificar Asignaciones/Usuarios/Cuentas:** Comandos para editar entradas existentes.
-*   **Interfaz Mejorada:** Usar botones inline de Telegram para `/list` y `/get`.
-*   **Notificaciones:** Avisar a usuarios (y/o admin) antes de que expire su acceso.
-*   **Gestión de Errores:** Mejorar el manejo de errores específicos de la base de datos y la API de Telegram.
+*   **Eliminar Cuentas Propias:** Añadir comando `/deletemyaccount <account_id>` para usuarios.
+*   **Eliminar Cuentas (Admin):** Añadir comando `/deleteaccount <account_id>` para admin.
+*   **Eliminar Usuarios (Admin):** Añadir comando `/deleteuser <user_id>` para admin.
+*   **Modificar Cuentas/Usuarios:** Comandos para editar entradas existentes.
+*   **Notificaciones:** Avisar a usuarios antes de que expire su permiso general o sus cuentas.
+*   **Gestión de Errores:** Mejorar el manejo de errores específicos.

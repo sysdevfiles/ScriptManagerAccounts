@@ -8,11 +8,9 @@ import database as db
 import user_handlers
 # Importar handlers específicos y conversaciones
 import admin_handlers
-from admin_handlers import (
-    adduser_conv_handler,
-    add_account_conv_handler, # Importar nueva conversación
-    assign_account_conv_handler # Importar nueva conversación
-)
+from admin_handlers import adduser_conv_handler # Solo queda esta conversación de admin
+# Importar nuevas conversaciones de usuario
+from user_handlers import addmyaccount_conv_handler, deletemyaccount_conv_handler, editmyaccount_conv_handler
 import callback_handlers
 
 # Cargar variables de entorno
@@ -52,22 +50,24 @@ def main() -> None:
 
     # --- Registrar Handlers ---
 
-    # Comandos de Usuario (desde user_handlers.py)
+    # Comandos/Conversaciones de Usuario (desde user_handlers.py)
     application.add_handler(CommandHandler("start", user_handlers.start))
     application.add_handler(CommandHandler("help", user_handlers.help_command))
     application.add_handler(CommandHandler("status", user_handlers.status_command))
     application.add_handler(CommandHandler("list", user_handlers.list_accounts))
     application.add_handler(CommandHandler("get", user_handlers.get_account))
+    application.add_handler(addmyaccount_conv_handler) # Añadir nueva conversación de usuario
+    application.add_handler(deletemyaccount_conv_handler) # Añadir handler de eliminar
+    application.add_handler(editmyaccount_conv_handler) # Añadir handler de editar
 
     # Comandos/Conversaciones de Admin (desde admin_handlers.py)
-    # application.add_handler(CommandHandler("add", admin_handlers.add_account)) # <-- Antigua
-    application.add_handler(add_account_conv_handler) # <-- Nueva
     application.add_handler(adduser_conv_handler)
-    # application.add_handler(CommandHandler("assign", admin_handlers.assign_account)) # <-- Antigua
-    application.add_handler(assign_account_conv_handler) # <-- Nueva
     application.add_handler(CommandHandler("listusers", admin_handlers.list_users))
     application.add_handler(CommandHandler("listallaccounts", admin_handlers.list_all_accounts))
-    application.add_handler(CommandHandler("listassignments", admin_handlers.list_assignments))
+    # ELIMINAR handlers obsoletos de admin
+    # application.add_handler(add_account_conv_handler)
+    # application.add_handler(assign_account_conv_handler)
+    # application.add_handler(CommandHandler("listassignments", admin_handlers.list_assignments))
 
     # Callback Handler (desde callback_handlers.py)
     application.add_handler(CallbackQueryHandler(callback_handlers.button_callback_handler))
