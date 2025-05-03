@@ -6,8 +6,14 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 # Importar módulos locales de handlers
 import database as db
 import user_handlers
+# Importar handlers específicos y conversaciones
 import admin_handlers
-import callback_handlers # Importar para el CallbackQueryHandler
+from admin_handlers import (
+    adduser_conv_handler,
+    add_account_conv_handler, # Importar nueva conversación
+    assign_account_conv_handler # Importar nueva conversación
+)
+import callback_handlers
 
 # Cargar variables de entorno
 load_dotenv()
@@ -49,14 +55,17 @@ def main() -> None:
     # Comandos de Usuario (desde user_handlers.py)
     application.add_handler(CommandHandler("start", user_handlers.start))
     application.add_handler(CommandHandler("help", user_handlers.help_command))
-    application.add_handler(CommandHandler("status", user_handlers.status_command)) # También botón
-    application.add_handler(CommandHandler("list", user_handlers.list_accounts))   # También botón
+    application.add_handler(CommandHandler("status", user_handlers.status_command))
+    application.add_handler(CommandHandler("list", user_handlers.list_accounts))
     application.add_handler(CommandHandler("get", user_handlers.get_account))
 
-    # Comandos de Admin (desde admin_handlers.py)
-    application.add_handler(CommandHandler("add", admin_handlers.add_account))
-    application.add_handler(CommandHandler("adduser", admin_handlers.add_user))
-    application.add_handler(CommandHandler("listusers", admin_handlers.list_users)) # También botón
+    # Comandos/Conversaciones de Admin (desde admin_handlers.py)
+    # application.add_handler(CommandHandler("add", admin_handlers.add_account)) # <-- Antigua
+    application.add_handler(add_account_conv_handler) # <-- Nueva
+    application.add_handler(adduser_conv_handler)
+    # application.add_handler(CommandHandler("assign", admin_handlers.assign_account)) # <-- Antigua
+    application.add_handler(assign_account_conv_handler) # <-- Nueva
+    application.add_handler(CommandHandler("listusers", admin_handlers.list_users))
     application.add_handler(CommandHandler("listallaccounts", admin_handlers.list_all_accounts))
     application.add_handler(CommandHandler("listassignments", admin_handlers.list_assignments))
 

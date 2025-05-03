@@ -118,16 +118,25 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
              await query.edit_message_text(text="⛔ Acceso denegado.")
     elif callback_data == 'admin_add_user_prompt':
          if is_admin_user:
-             # Enviar mensaje guía en lugar de ejecutar directamente
-             await query.edit_message_text(text="Para añadir/actualizar un usuario, envía:\n`/adduser <ID_TELEGRAM> <NOMBRE> <DÍAS_ACCESO>`", parse_mode=ParseMode.MARKDOWN)
+             # Modificar mensaje guía
+             await query.edit_message_text(
+                 text="Usa el comando `/adduser` para iniciar el proceso interactivo de añadir/actualizar un usuario.\n\n"
+                      "Opcionalmente, puedes usar `/adduser <ID_TELEGRAM> <NOMBRE> <DÍAS_ACCESO>` para hacerlo directamente.",
+                 parse_mode=ParseMode.MARKDOWN,
+                 reply_markup=get_back_to_menu_keyboard() # Añadir botón volver
+            )
          else:
-             await query.edit_message_text(text="⛔ Acceso denegado.")
+             await query.edit_message_text(text="⛔ Acceso denegado.", reply_markup=get_back_to_menu_keyboard())
     elif callback_data == 'admin_add_account_prompt':
          if is_admin_user:
              # Enviar mensaje guía
-             await query.edit_message_text(text="Para añadir una cuenta, envía:\n`/add <SERVICIO> <EMAIL> <PERFIL> <PIN>`", parse_mode=ParseMode.MARKDOWN)
+             await query.edit_message_text(
+                 text="➕ Para añadir un nuevo perfil, usa el comando `/add` para iniciar el proceso interactivo.",
+                 parse_mode=ParseMode.MARKDOWN,
+                 reply_markup=get_back_to_menu_keyboard()
+             )
          else:
-             await query.edit_message_text(text="⛔ Acceso denegado.")
+             await query.edit_message_text(text="⛔ Acceso denegado.", reply_markup=get_back_to_menu_keyboard())
 
     else:
         logger.warning(f"Callback data no reconocido: {callback_data}")
