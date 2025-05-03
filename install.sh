@@ -125,6 +125,12 @@ if [ $? -ne 0 ]; then
     echo "ERROR: Falló la creación del entorno virtual."
     exit 1
 fi
+# Asegurar permisos de ejecución para el intérprete de Python en venv
+chmod +x "$BOT_DIR/venv/bin/python"
+if [ $? -ne 0 ]; then
+    echo "ADVERTENCIA: No se pudo asegurar permisos de ejecución para $BOT_DIR/venv/bin/python."
+fi
+
 
 # --- 6. Instalar Dependencias ---
 echo "[5/8] Instalando dependencias de Python..."
@@ -138,10 +144,14 @@ fi
 # --- 7. Configurar systemd ---
 echo "[6/8] Configurando servicio systemd ($SERVICE_NAME.service)..."
 SERVICE_FILE_PATH="/etc/systemd/system/${SERVICE_NAME}.service"
+# Asegurar permisos de ejecución para el script principal del bot
+chmod +x "$BOT_DIR/bot.py"
+if [ $? -ne 0 ]; then
+    echo "ADVERTENCIA: No se pudo asegurar permisos de ejecución para $BOT_DIR/bot.py."
+fi
 
 # Crear el archivo de servicio
-# Asegurarse que las variables $CURRENT_USER, $BOT_DIR, $ENV_FILE_PATH tienen valores correctos aquí
-echo "Generando $SERVICE_FILE_PATH con User=$CURRENT_USER y WorkingDirectory=$BOT_DIR..."
+echo "Generando $SERVICE_FILE_PATH con User=$CURRENT_USER y Group=$CURRENT_USER..." # Mensaje actualizado
 
 cat << EOF > "$SERVICE_FILE_PATH"
 [Unit]
@@ -150,7 +160,8 @@ After=network.target
 
 [Service]
 User=$CURRENT_USER
-Group=$(id -gn $CURRENT_USER) # Usar el grupo principal del usuario
+# Usar el nombre de usuario también para el grupo
+Group=$CURRENT_USER
 WorkingDirectory=$BOT_DIR
 # Usar la ruta completa al python del venv
 ExecStart=$BOT_DIR/venv/bin/python $BOT_DIR/bot.py
@@ -192,7 +203,10 @@ echo "Estado actual del servicio: $SERVICE_STATUS"
 
 if [ "$SERVICE_STATUS" != "active" ]; then
      echo "---------------------------------------------------------------------"
-     echo "ERROR: El servicio '$SERVICE_NAME' no está activo."
+     echo "ERROR: El servicio '$SERVICE_NAME' no está activo (Estado: $SERVICE_STATUS)."
+     echo "Mostrando las últimas 15 líneas del log del servicio:"
+     journalctl -u ${SERVICE_NAME}.service -n 15 --no-pager # Mostrar logs directamente
+     echo "---------------------------------------------------------------------"
      echo "Posibles causas:"
      echo "  - Error en el código del bot (revisa los logs)."
      echo "  - Problema con el archivo .env (ruta o permisos)."
@@ -205,6 +219,22 @@ if [ "$SERVICE_STATUS" != "active" ]; then
      echo "  5. Verificar archivo service: cat $SERVICE_FILE_PATH"
      echo "  6. Reiniciar servicio después de corregir: sudo systemctl restart ${SERVICE_NAME}.service"
      echo "---------------------------------------------------------------------"
+
+     # --- INICIO: Limpieza automática en caso de fallo ---
+     echo "Intentando limpiar la instalación fallida..."
+     echo "Deteniendo el servicio (si está corriendo)..."
+     systemctl stop ${SERVICE_NAME}.service > /dev/null 2>&1
+     echo "Deshabilitando el servicio..."
+     systemctl disable ${SERVICE_NAME}.service > /dev/null 2>&1
+     echo "Eliminando el directorio del bot: $BOT_DIR..."
+     rm -rf "$BOT_DIR"
+     echo "Eliminando el archivo de servicio: $SERVICE_FILE_PATH..."
+     rm -f "$SERVICE_FILE_PATH"
+     echo "Recargando systemd..."
+     systemctl daemon-reload
+     echo "Limpieza automática completada. Por favor, revisa los errores e intenta la instalación de nuevo."
+     # --- FIN: Limpieza automática en caso de fallo ---
+
      exit 1
 fi
 
