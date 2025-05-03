@@ -5,21 +5,18 @@ import os
 from dotenv import load_dotenv
 from telegram import Update
 from telegram.ext import ContextTypes
-from telegram.constants import ParseMode # Importar ParseMode
+from telegram.constants import ParseMode
 
 # Importar funciones de base de datos y otros módulos necesarios
 import database as db
-# Importar selectivamente para evitar dependencia circular completa
-from user_handlers import get_main_menu_keyboard, get_back_to_menu_keyboard
-from user_handlers import ADMIN_USER_ID # Asumiendo que está definido en user_handlers
-
-# Cargar ADMIN_USER_ID para comprobaciones
-load_dotenv()
-ADMIN_USER_ID = int(os.getenv("ADMIN_USER_ID"))
+# Importar desde utils.py
+from utils import ADMIN_USER_ID, get_back_to_menu_keyboard
+# Importar get_main_menu_keyboard desde user_handlers si se necesita aquí
+from user_handlers import get_main_menu_keyboard as get_user_main_menu
 
 logger = logging.getLogger(__name__)
 
-# --- Funciones de Comandos de Admin ---
+# --- Funciones de Comandos de Administrador ---
 
 # Decorador para verificar si el usuario es admin
 def admin_required(func):
@@ -231,7 +228,7 @@ async def list_all_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         # Determinar teclado
         # Usamos get_main_menu_keyboard de user_handlers para comandos
         # y get_back_to_menu_keyboard de callback_handlers para callbacks
-        final_keyboard = get_back_to_menu_keyboard() if is_callback else get_main_menu_keyboard(True) # True porque es admin
+        final_keyboard = get_back_to_menu_keyboard() if is_callback else get_user_main_menu(True) # True porque es admin
 
         # Enviar respuesta
         if is_callback:
@@ -250,7 +247,7 @@ async def list_all_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     except Exception as e:
         logger.error(f"Error al procesar list_all_accounts para {user_id}: {e}", exc_info=True)
         error_message = "⚠️ Ocurrió un error al obtener la lista completa de cuentas."
-        final_keyboard = get_back_to_menu_keyboard() if is_callback else get_main_menu_keyboard(True)
+        final_keyboard = get_back_to_menu_keyboard() if is_callback else get_user_main_menu(True)
         if is_callback:
             await query.edit_message_text(text=error_message, reply_markup=final_keyboard)
         elif update.message:

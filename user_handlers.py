@@ -2,24 +2,14 @@ import logging
 from datetime import datetime
 import time
 import os
-from dotenv import load_dotenv
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
-from telegram.constants import ParseMode # Asegúrate que ParseMode está importado
+from telegram.constants import ParseMode
 
 # Importar funciones de base de datos y otros módulos necesarios
 import database as db
-
-# Cargar y verificar ADMIN_USER_ID
-load_dotenv()
-ADMIN_USER_ID_STR = os.getenv("ADMIN_USER_ID")
-ADMIN_USER_ID = None
-if ADMIN_USER_ID_STR and ADMIN_USER_ID_STR.isdigit():
-    ADMIN_USER_ID = int(ADMIN_USER_ID_STR)
-    logging.info(f"ADMIN_USER_ID cargado correctamente: {ADMIN_USER_ID}")
-else:
-    logging.critical("Error: ADMIN_USER_ID no encontrado o inválido en .env al cargar user_handlers.py")
-    # Considera si el bot debe detenerse aquí o continuar con funcionalidad limitada
+# Importar desde utils.py
+from utils import ADMIN_USER_ID, get_back_to_menu_keyboard
 
 logger = logging.getLogger(__name__)
 
@@ -41,13 +31,6 @@ def get_main_menu_keyboard(is_admin: bool) -> InlineKeyboardMarkup:
         # Podrías añadir un botón para asignar, aunque /assign requiere IDs
         # keyboard.append([InlineKeyboardButton("🤝 Admin: Asignar Cuenta", callback_data='admin_assign_account_prompt')])
     return InlineKeyboardMarkup(keyboard)
-
-# --- NUEVA UBICACIÓN PARA ESTA FUNCIÓN ---
-def get_back_to_menu_keyboard() -> InlineKeyboardMarkup:
-     """Genera un teclado con solo el botón de volver al menú."""
-     # El callback_data 'back_to_menu' será manejado en callback_handlers.py
-     keyboard = [[InlineKeyboardButton("⬅️ Volver al Menú", callback_data='back_to_menu')]]
-     return InlineKeyboardMarkup(keyboard)
 
 # --- Funciones de Comandos de Usuario ---
 
