@@ -6,12 +6,17 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 # Importar módulos locales de handlers
 import database as db
 import user_handlers
-# Importar handlers específicos y conversaciones
 import admin_handlers
-from admin_handlers import adduser_conv_handler # Solo queda esta conversación de admin
-# Importar nuevas conversaciones de usuario
-from user_handlers import addmyaccount_conv_handler, deletemyaccount_conv_handler, editmyaccount_conv_handler, importmyaccounts_conv_handler
 import callback_handlers
+
+# Importar conversaciones específicas para claridad
+from user_handlers import (
+    addmyaccount_conv_handler,
+    deletemyaccount_conv_handler,
+    editmyaccount_conv_handler,
+    importmyaccounts_conv_handler
+)
+from admin_handlers import adduser_conv_handler, deleteuser_conv_handler
 
 # Cargar variables de entorno
 load_dotenv()
@@ -48,35 +53,46 @@ def main() -> None:
     # Crear la Application
     application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
 
+    # --- Agrupar Handlers ---
+
+    user_command_handlers = [
+        CommandHandler("start", user_handlers.start),
+        CommandHandler("help", user_handlers.help_command),
+        CommandHandler("status", user_handlers.status_command),
+        CommandHandler("list", user_handlers.list_accounts),
+        CommandHandler("get", user_handlers.get_account),
+        CommandHandler("backupmyaccounts", user_handlers.backup_my_accounts),
+        CommandHandler("importmyaccounts", user_handlers.import_my_accounts_start), # Entry point for conversation
+    ]
+
+    user_conversation_handlers = [
+        addmyaccount_conv_handler,
+        deletemyaccount_conv_handler,
+        editmyaccount_conv_handler,
+        importmyaccounts_conv_handler,
+    ]
+
+    admin_command_handlers = [
+        CommandHandler("listusers", admin_handlers.list_users),
+        CommandHandler("listallaccounts", admin_handlers.list_all_accounts), # <-- Descomentado
+        # Nota: Los entry points de las conversaciones de admin también son CommandHandlers
+        # pero se incluyen en el ConversationHandler mismo.
+    ]
+
+    admin_conversation_handlers = [
+        adduser_conv_handler,
+        deleteuser_conv_handler,
+    ]
+
     # --- Registrar Handlers ---
+    application.add_handlers(user_command_handlers)
+    application.add_handlers(user_conversation_handlers)
+    application.add_handlers(admin_command_handlers)
+    application.add_handlers(admin_conversation_handlers)
 
-    # Comandos/Conversaciones de Usuario (desde user_handlers.py)
-    application.add_handler(CommandHandler("start", user_handlers.start))
-    application.add_handler(CommandHandler("help", user_handlers.help_command))
-    application.add_handler(CommandHandler("status", user_handlers.status_command))
-    application.add_handler(CommandHandler("list", user_handlers.list_accounts))
-    application.add_handler(CommandHandler("get", user_handlers.get_account))
-    application.add_handler(CommandHandler("backupmyaccounts", user_handlers.backup_my_accounts)) # <-- Nuevo comando
-    application.add_handler(CommandHandler("importmyaccounts", user_handlers.import_my_accounts_start)) # <-- Nuevo comando
-    application.add_handler(addmyaccount_conv_handler) # Añadir nueva conversación de usuario
-    application.add_handler(deletemyaccount_conv_handler) # Añadir handler de eliminar
-    application.add_handler(editmyaccount_conv_handler) # Añadir handler de editar
-    application.add_handler(importmyaccounts_conv_handler) # <-- Nueva conversación
-
-    # Comandos/Conversaciones de Admin (desde admin_handlers.py)
-    application.add_handler(adduser_conv_handler)
-    application.add_handler(CommandHandler("listusers", admin_handlers.list_users))
-    application.add_handler(CommandHandler("listallaccounts", admin_handlers.list_all_accounts))
-    # ELIMINAR handlers obsoletos de admin
-    # application.add_handler(add_account_conv_handler)
-    # application.add_handler(assign_account_conv_handler)
-    # application.add_handler(CommandHandler("listassignments", admin_handlers.list_assignments))
-
-    # Callback Handler (desde callback_handlers.py)
+    # Registrar otros handlers individuales
     application.add_handler(CallbackQueryHandler(callback_handlers.button_callback_handler))
-
-    # Manejador para comandos desconocidos (desde user_handlers.py)
-    application.add_handler(MessageHandler(filters.COMMAND, user_handlers.unknown))
+    application.add_handler(MessageHandler(filters.COMMAND, user_handlers.unknown)) # Maneja comandos no reconocidos
 
     # Iniciar el Bot
     logger.info("Iniciando el bot...")

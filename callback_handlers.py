@@ -13,7 +13,8 @@ from user_handlers import ADMIN_USER_ID # Importar ADMIN_ID
 # Importar funciones de admin que aún se usan
 from admin_handlers import (
     list_users as admin_list_users_func,
-    list_all_accounts as admin_list_all_accounts_func,
+    delete_user_start as admin_delete_user_start_func, # <-- Nuevo import
+    list_all_accounts as admin_list_all_accounts_func # Importar nueva función
 )
 # Importar función de inicio de conversación de usuario
 from user_handlers import add_my_account_start # Importar inicio de conversación
@@ -30,6 +31,8 @@ CALLBACK_EDIT_MY_ACCOUNT = "edit_my_account" # Nueva constante
 CALLBACK_DELETE_MY_ACCOUNT = "delete_my_account" # Nueva constante
 CALLBACK_BACKUP_MY_ACCOUNTS = "backup_my_accounts" # Nueva constante
 CALLBACK_IMPORT_MY_ACCOUNTS = "import_my_accounts" # Nueva constante
+CALLBACK_ADMIN_DELETE_USER_PROMPT = "admin_delete_user_prompt" # <-- Nueva constante
+CALLBACK_ADMIN_LIST_ALL_ACCOUNTS = "admin_list_all_accounts" # Nueva constante
 
 # --- Funciones de Menú con Botones ---
 def get_back_to_menu_keyboard() -> InlineKeyboardMarkup:
@@ -99,13 +102,6 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
              try: await query.edit_message_text(text="⛔ Acceso denegado.", reply_markup=get_back_to_menu_keyboard())
              except BadRequest: pass # Ignorar si no se puede editar
 
-    elif callback_data == 'admin_list_all_accounts':
-         if is_admin_user:
-             await admin_list_all_accounts_func(update, context)
-         else:
-             try: await query.edit_message_text(text="⛔ Acceso denegado.", reply_markup=get_back_to_menu_keyboard())
-             except BadRequest: pass
-
     elif callback_data == 'admin_add_user_prompt':
          if is_admin_user:
              # Borrar mensaje anterior y mostrar prompt
@@ -116,6 +112,30 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
                      reply_markup=get_back_to_menu_keyboard()
                  )
              except BadRequest: pass # Ignorar si no se puede editar
+         else:
+             try: await query.edit_message_text(text="⛔ Acceso denegado.", reply_markup=get_back_to_menu_keyboard())
+             except BadRequest: pass
+
+    # --- NUEVO Handler para Botón Eliminar Usuario ---
+    elif callback_data == CALLBACK_ADMIN_DELETE_USER_PROMPT:
+         if is_admin_user:
+             # Iniciar la conversación de eliminación directamente
+             # await admin_delete_user_start_func(update, context) # Esto iniciaría la conversación, pero desde un botón es mejor solo dar la instrucción
+             try:
+                 await query.edit_message_text(
+                     text="🗑️ Para eliminar un usuario, usa el comando `/deleteuser` para iniciar el proceso interactivo.",
+                     parse_mode=ParseMode.MARKDOWN,
+                     reply_markup=get_back_to_menu_keyboard()
+                 )
+             except BadRequest: pass # Ignorar si no se puede editar
+         else:
+             try: await query.edit_message_text(text="⛔ Acceso denegado.", reply_markup=get_back_to_menu_keyboard())
+             except BadRequest: pass
+
+    # --- NUEVO Handler para Botón Listar Todas las Cuentas ---
+    elif callback_data == CALLBACK_ADMIN_LIST_ALL_ACCOUNTS:
+         if is_admin_user:
+             await admin_list_all_accounts_func(update, context) # Llamar a la función de listado
          else:
              try: await query.edit_message_text(text="⛔ Acceso denegado.", reply_markup=get_back_to_menu_keyboard())
              except BadRequest: pass

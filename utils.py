@@ -1,8 +1,8 @@
 import os
 import logging
 from dotenv import load_dotenv
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.ext import ContextTypes
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, ReplyKeyboardRemove
+from telegram.ext import ContextTypes, ConversationHandler
 from telegram.error import BadRequest
 from datetime import timedelta
 
@@ -24,17 +24,19 @@ else:
 
 # --- Constantes de Callback Data (Opcional, podrían estar aquí o en callback_handlers) ---
 CALLBACK_BACK_TO_MENU = "back_to_menu"
-DELETE_DELAY_SECONDS = 20 # Segundos para borrar mensajes de confirmación
 
-# --- Funciones de Teclado Compartidas ---
+# --- Constantes de Tiempo ---
+DELETE_DELAY_SECONDS = 15 # Ajustar según preferencia
+
+# --- Funciones de Teclado ---
 def get_back_to_menu_keyboard() -> InlineKeyboardMarkup:
-     """Genera un teclado con solo el botón de volver al menú."""
-     keyboard = [[InlineKeyboardButton("⬅️ Volver al Menú", callback_data=CALLBACK_BACK_TO_MENU)]]
-     return InlineKeyboardMarkup(keyboard)
+    """Devuelve un teclado inline con solo el botón 'Volver al Menú'."""
+    keyboard = [[InlineKeyboardButton("⬅️ Volver al Menú", callback_data=CALLBACK_BACK_TO_MENU)]]
+    return InlineKeyboardMarkup(keyboard)
 
-# --- Función auxiliar para borrar mensajes ---
+# --- Funciones de Borrado de Mensajes ---
 async def delete_message_later(context: ContextTypes.DEFAULT_TYPE):
-    """Borra un mensaje específico después de un tiempo."""
+    """Callback para borrar un mensaje específico."""
     job = context.job
     chat_id = job.data['chat_id']
     message_id = job.data['message_id']
@@ -50,5 +52,33 @@ async def delete_message_later(context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"❌ Error general al borrar automáticamente el mensaje {message_id} en chat {chat_id}: {e}")
 
-# Podrías mover get_main_menu_keyboard aquí también si causa problemas
-# def get_main_menu_keyboard(is_admin: bool) -> InlineKeyboardMarkup: ...
+# --- Nueva Función Genérica de Cancelación ---
+async def generic_cancel_conversation(update: Update, context: ContextTypes.DEFAULT_TYPE, conversation_name: str) -> int:
+    """Función genérica para cancelar una conversación."""
+    user_id = update.effective_user.id
+    logger.info(f"User {user_id} canceló la conversación '{conversation_name}'.")
+    message_text = "Operación cancelada."
+
+    # Intentar editar si es callback, si no, enviar respuesta
+    if update.callback_query:
+        try:
+            # Editar mensaje para quitar botones y mostrar cancelación
+            await update.callback_query.edit_message_text(message_text, reply_markup=None)
+        except BadRequest as e:
+            # Si no se puede editar (ej. mensaje muy viejo), enviar uno nuevo
+            if "Message to edit not found" in str(e) or "message is not modified" not in str(e):
+                 logger.warning(f"No se pudo editar mensaje al cancelar {conversation_name} para {user_id}: {e}. Enviando nuevo.")
+                 try:
+                     # Enviar mensaje simple sin teclado de respuesta
+                     await context.bot.send_message(chat_id=user_id, text=message_text, reply_markup=ReplyKeyboardRemove())
+                 except Exception as send_error:
+                     logger.error(f"Error enviando mensaje de cancelación a {user_id}: {send_error}")
+            else:
+                 logger.info(f"Mensaje no modificado al cancelar {conversation_name} para {user_id}.")
+
+    elif update.message:
+        # Si se canceló con /cancel, responder al comando
+        await update.message.reply_text(message_text, reply_markup=ReplyKeyboardRemove())
+
+    context.user_data.clear()
+    return ConversationHandler.END
