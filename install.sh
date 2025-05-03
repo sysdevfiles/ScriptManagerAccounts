@@ -3,48 +3,30 @@
 # Script de instalación para el Bot Gestor de Cuentas en Ubuntu 20.04+
 # Ejecutar con: sudo bash install.sh O directamente como root
 
-# --- Detección de Usuario ---
-# Determina el usuario bajo el cual se ejecutará el servicio.
-# Si se usa 'sudo' desde un usuario normal, usa ese usuario ($SUDO_USER).
-# Si se ejecuta directamente como root, el servicio también se ejecutará como root.
-if [ "$(id -u)" -eq 0 ] && [ -n "$SUDO_USER" ] && [ "$SUDO_USER" != "root" ]; then
-    # Ejecutado con sudo por un usuario normal
-    CURRENT_USER=$SUDO_USER
-    echo "INFO: Detectado ejecución con sudo por el usuario '$CURRENT_USER'."
-elif [ "$(id -u)" -eq 0 ]; then
-    # Ejecutado directamente como root
-    CURRENT_USER="root"
-    echo "ADVERTENCIA: Ejecutando como root. El servicio del bot también se ejecutará como root (no recomendado)."
-else
-    # Ejecutado sin sudo por un usuario normal (no permitido para instalación completa)
-    echo "ERROR: Este script necesita privilegios de root para instalar paquetes y configurar systemd." >&2
-    echo "Ejecútalo usando 'sudo bash install.sh' desde tu cuenta de usuario normal." >&2
-    exit 1
+# --- Verificación de Privilegios ---
+if [ "$(id -u)" -ne 0 ]; then
+  echo "ERROR: Este script necesita privilegios de root para instalar paquetes y configurar systemd." >&2
+  echo "Ejecútalo usando 'sudo bash install.sh' o directamente como usuario root." >&2
+  exit 1
 fi
 
+# --- Variables ---
+# Como se ejecuta con privilegios root, se asume que el usuario y home son de root
+CURRENT_USER="root"
+USER_HOME="/root"
+echo "INFO: Ejecutando instalación como usuario '$CURRENT_USER'."
 
-# Determinar el directorio home del usuario
-# Si es root, usa /root, de lo contrario busca el home del usuario normal
-if [ "$CURRENT_USER" == "root" ]; then
-    USER_HOME="/root"
-else
-    USER_HOME=$(getent passwd "$CURRENT_USER" | cut -d: -f6)
-fi
-
-if [ -z "$USER_HOME" ] || [ ! -d "$USER_HOME" ]; then
-    echo "ERROR: No se pudo determinar un directorio home válido para el usuario '$CURRENT_USER'."
-    exit 1
-fi
-
-BOT_DIR="$USER_HOME/telegram_bot" # Directorio de instalación
+BOT_DIR="$USER_HOME/telegram_bot" # Directorio de instalación (/root/telegram_bot)
 SERVICE_NAME="telegrambot"
 PYTHON_EXEC="python3"
 # !!! URL del repositorio actualizada !!!
 GITHUB_REPO_URL="https://github.com/sysdevfiles/ScriptManagerAccounts.git"
+# !!! Credenciales Hardcoded (NO RECOMENDADO POR SEGURIDAD) !!!
+BOT_TOKEN="7755771824:AAGc0F0aKngsT3x91DYwMJihwWN8xu0LauI"
+ADMIN_ID="5797883359"
 
 
 echo "--- Iniciando Instalación del Bot Gestor de Cuentas para el usuario '$CURRENT_USER' ---"
-# ... (Verificación USER_HOME ya hecha arriba) ...
 echo "Directorio de instalación: $BOT_DIR"
 
 # --- 0. Limpieza Opcional ---
@@ -65,28 +47,20 @@ fi
 
 
 # --- 1. Prerrequisitos del Sistema ---
-echo "[1/8] Actualizando sistema e instalando paquetes base..."
+echo "[1/7] Actualizando sistema e instalando paquetes base..."
 apt update
 # apt upgrade -y # Comentado para rapidez, descomentar si se desea upgrade completo
 apt install -y $PYTHON_EXEC ${PYTHON_EXEC}-pip ${PYTHON_EXEC}-venv sqlite3 libsqlite3-dev git curl # Añadido git y curl
 
 # --- 2. Crear Directorio Padre (si es necesario, git clone crea el directorio final) ---
-echo "[2/8] Asegurando directorio padre $USER_HOME..."
+echo "[2/7] Asegurando directorio padre $USER_HOME..."
 mkdir -p "$USER_HOME"
-# Si CURRENT_USER no es root, ajustar permisos. Si es root, ya tiene permisos.
-if [ "$CURRENT_USER" != "root" ]; then
-    chown "$CURRENT_USER:$CURRENT_USER" "$USER_HOME"
-fi
+# No se necesita chown si es root
 
 # --- 3. Clonar Repositorio ---
-echo "[3/8] Clonando repositorio desde $GITHUB_REPO_URL..."
-# Clonar como el usuario CURRENT_USER (sea root o no)
-# Usamos 'runuser' o 'sudo -u' si CURRENT_USER no es root, sino directo.
-if [ "$CURRENT_USER" == "root" ]; then
-    git clone "$GITHUB_REPO_URL" "$BOT_DIR"
-else
-    sudo -u "$CURRENT_USER" git clone "$GITHUB_REPO_URL" "$BOT_DIR"
-fi
+echo "[3/7] Clonando repositorio desde $GITHUB_REPO_URL..."
+# Clonar directamente como root
+git clone "$GITHUB_REPO_URL" "$BOT_DIR"
 if [ $? -ne 0 ]; then
     echo "ERROR: Falló la clonación del repositorio. Verifica la URL y los permisos."
     exit 1
@@ -97,55 +71,38 @@ if [ ! -f "$BOT_DIR/bot.py" ] || [ ! -f "$BOT_DIR/requirements.txt" ]; then
     exit 1
 fi
 
-# --- 4. Crear/Verificar .env (Paso Manual Aún Necesario) ---
-echo "---------------------------------------------------------------------"
-echo "[PASO MANUAL REQUERIDO]"
-echo "El código fuente ha sido clonado en $BOT_DIR."
-echo "Ahora DEBES crear o verificar el archivo .env en $BOT_DIR con tu TOKEN y ADMIN_ID:"
-echo "  Ejemplo de contenido para $BOT_DIR/.env:"
-echo '  # Inserte su token de Telegram (obtenido de @BotFather)'
-echo '  TELEGRAM_BOT_TOKEN="TU_TOKEN_DE_BOTFATHER"'
-echo '  # Inserte su ID de Telegram (obtenido de @userinfobot)'
-echo '  ADMIN_USER_ID="TU_ID_DE_USERINFOBOT"'
-echo ""
-echo "Puedes usar 'scp', 'rsync' o un cliente SFTP."
-echo "Ejemplo con nano para crear .env: nano $BOT_DIR/.env (si eres root) o sudo -u $CURRENT_USER nano $BOT_DIR/.env (si no eres root)"
-echo "Asegúrate de que el archivo .env tenga permisos de lectura para '$CURRENT_USER'."
-echo "Ejemplo: chown $CURRENT_USER:$CURRENT_USER $BOT_DIR/.env && chmod 600 $BOT_DIR/.env"
-echo "---------------------------------------------------------------------"
-ENV_FILE_PATH="$BOT_DIR/.env" # Definir ruta explícita
-while true; do
-    read -p "Presiona Enter cuando hayas creado/verificado el archivo .env en $ENV_FILE_PATH..."
-    # Verificar si .env existe
-    if [ -f "$ENV_FILE_PATH" ]; then
-        # Asegurar permisos correctos para .env ANTES de configurar systemd
-        echo "Verificando permisos de $ENV_FILE_PATH..."
-        # Cambiar propietario (importante si se creó como root pero se correrá como otro user, o viceversa)
-        chown "$CURRENT_USER:$CURRENT_USER" "$ENV_FILE_PATH"
-        if [ $? -ne 0 ]; then
-             echo "ADVERTENCIA: No se pudo cambiar el propietario de $ENV_FILE_PATH. Verifica los permisos manualmente."
-        fi
-         # Establecer permisos (600: lectura/escritura solo para propietario)
-        chmod 600 "$ENV_FILE_PATH"
-         if [ $? -ne 0 ]; then
-             echo "ADVERTENCIA: No se pudo cambiar los permisos de $ENV_FILE_PATH a 600. Verifica manualmente."
-        fi
-        echo "Archivo .env detectado y permisos ajustados (propietario: $CURRENT_USER, modo: 600). Continuando..."
-        break
-    else
-        echo "ERROR: Faltan el archivo .env en $ENV_FILE_PATH. Por favor, créalo."
+# --- 4. Crear Archivo .env Automáticamente ---
+echo "[4/7] Creando archivo .env con credenciales..."
+ENV_FILE_PATH="$BOT_DIR/.env"
+# Crear el archivo .env con las credenciales hardcoded
+cat << EOF > "$ENV_FILE_PATH"
+# Archivo .env generado automáticamente por install.sh
+TELEGRAM_BOT_TOKEN="$BOT_TOKEN"
+ADMIN_USER_ID="$ADMIN_ID"
+EOF
+
+# Verificar creación y establecer permisos
+if [ -f "$ENV_FILE_PATH" ]; then
+    echo "Verificando permisos de $ENV_FILE_PATH..."
+    chown root:root "$ENV_FILE_PATH"
+    if [ $? -ne 0 ]; then
+         echo "ADVERTENCIA: No se pudo cambiar el propietario de $ENV_FILE_PATH."
     fi
-done
+    chmod 600 "$ENV_FILE_PATH"
+     if [ $? -ne 0 ]; then
+         echo "ADVERTENCIA: No se pudo cambiar los permisos de $ENV_FILE_PATH a 600."
+    fi
+    echo "Archivo .env creado y permisos ajustados (propietario: root, modo: 600)."
+else
+    echo "ERROR: Falló la creación automática del archivo .env en $ENV_FILE_PATH."
+    exit 1
+fi
 
 
 # --- 5. Entorno Virtual ---
-echo "[4/8] Creando entorno virtual..."
-# Ejecutar como el usuario CURRENT_USER
-if [ "$CURRENT_USER" == "root" ]; then
-    $PYTHON_EXEC -m venv "$BOT_DIR/venv"
-else
-    sudo -u "$CURRENT_USER" $PYTHON_EXEC -m venv "$BOT_DIR/venv"
-fi
+echo "[5/7] Creando entorno virtual..."
+# Ejecutar directamente como root
+$PYTHON_EXEC -m venv "$BOT_DIR/venv"
 if [ $? -ne 0 ]; then
     echo "ERROR: Falló la creación del entorno virtual."
     exit 1
@@ -158,39 +115,26 @@ fi
 
 
 # --- 6. Instalar Dependencias ---
-echo "[5/8] Instalando dependencias de Python..."
-# Activar venv y ejecutar pip como el usuario CURRENT_USER
-if [ "$CURRENT_USER" == "root" ]; then
-    bash -c "source \"$BOT_DIR/venv/bin/activate\" && pip install --upgrade pip && pip install -r \"$BOT_DIR/requirements.txt\""
-else
-    sudo -u "$CURRENT_USER" bash -c "source \"$BOT_DIR/venv/bin/activate\" && pip install --upgrade pip && pip install -r \"$BOT_DIR/requirements.txt\""
-fi
+echo "[6/7] Instalando dependencias de Python..."
+# Activar venv y ejecutar pip directamente como root
+bash -c "source \"$BOT_DIR/venv/bin/activate\" && pip install --upgrade pip && pip install -r \"$BOT_DIR/requirements.txt\""
 if [ $? -ne 0 ]; then
     echo "ERROR: Falló la instalación de dependencias de Python."
     exit 1
 fi
 
 # --- 7. Configurar systemd ---
-echo "[6/8] Configurando servicio systemd ($SERVICE_NAME.service)..."
+echo "[7/7] Configurando servicio systemd ($SERVICE_NAME.service)..."
 SERVICE_FILE_PATH="/etc/systemd/system/${SERVICE_NAME}.service"
-# Asegurar permisos de ejecución para el script principal del bot
-# Ejecutar como CURRENT_USER si no es root
-if [ "$CURRENT_USER" == "root" ]; then
-    chmod +x "$BOT_DIR/bot.py"
-else
-    sudo -u "$CURRENT_USER" chmod +x "$BOT_DIR/bot.py"
-fi
+# Asegurar permisos de ejecución para el script principal del bot (como root)
+chmod +x "$BOT_DIR/bot.py"
 if [ $? -ne 0 ]; then
     echo "ADVERTENCIA: No se pudo asegurar permisos de ejecución para $BOT_DIR/bot.py."
 fi
 
-# Determinar User y Group para el servicio
-SERVICE_USER=$CURRENT_USER
-if [ "$CURRENT_USER" == "root" ]; then
-    SERVICE_GROUP="root" # Usar 'root' explícitamente como grupo para el usuario root
-else
-    SERVICE_GROUP=$CURRENT_USER # Usar el nombre del usuario como grupo para usuarios normales
-fi
+# Establecer User y Group explícitamente como root
+SERVICE_USER="root"
+SERVICE_GROUP="root"
 
 # Crear el archivo de servicio
 echo "Generando $SERVICE_FILE_PATH con User=$SERVICE_USER y Group=$SERVICE_GROUP..."
@@ -226,11 +170,11 @@ echo "Archivo $SERVICE_FILE_PATH creado."
 # echo "------------------------------------"
 
 # --- 8. Iniciar Servicio ---
-echo "[7/8] Recargando systemd y habilitando el servicio..."
+echo "Recargando systemd y habilitando el servicio..."
 systemctl daemon-reload
 systemctl enable ${SERVICE_NAME}.service
 
-echo "[8/8] Iniciando el servicio del bot (usando restart)..."
+echo "Iniciando el servicio del bot (usando restart)..."
 systemctl restart ${SERVICE_NAME}.service # Usar restart para asegurar que toma la nueva config
 
 echo "Esperando 5 segundos para que el servicio se estabilice..."
