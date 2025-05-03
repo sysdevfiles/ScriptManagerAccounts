@@ -16,8 +16,10 @@ ADMIN_USER_ID_STR = os.getenv("ADMIN_USER_ID") # Leer como string primero
 
 # Configurar logging
 logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.DEBUG # Cambiado a DEBUG
 )
+# Opcional: Reducir verbosidad de httpx si es demasiado ruidoso en DEBUG
+logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 def main() -> None:
