@@ -1,32 +1,38 @@
 #!/bin/bash
 
 # Script de instalación para el Bot Gestor de Cuentas en Ubuntu 20.04+
-# Ejecutar con: sudo bash install.sh (DESDE UNA CUENTA DE USUARIO NO ROOT)
+# Ejecutar con: sudo bash install.sh O directamente como root
 
-# --- Verificación de Usuario ---
-if [ "$(id -u)" -ne 0 ]; then
-  echo "ERROR: Este script debe ejecutarse con sudo." >&2
-  echo "Ejemplo: sudo bash install.sh" >&2
-  exit 1
+# --- Detección de Usuario ---
+# Determina el usuario bajo el cual se ejecutará el servicio.
+# Si se usa 'sudo' desde un usuario normal, usa ese usuario ($SUDO_USER).
+# Si se ejecuta directamente como root, el servicio también se ejecutará como root.
+if [ "$(id -u)" -eq 0 ] && [ -n "$SUDO_USER" ] && [ "$SUDO_USER" != "root" ]; then
+    # Ejecutado con sudo por un usuario normal
+    CURRENT_USER=$SUDO_USER
+    echo "INFO: Detectado ejecución con sudo por el usuario '$CURRENT_USER'."
+elif [ "$(id -u)" -eq 0 ]; then
+    # Ejecutado directamente como root
+    CURRENT_USER="root"
+    echo "ADVERTENCIA: Ejecutando como root. El servicio del bot también se ejecutará como root (no recomendado)."
+else
+    # Ejecutado sin sudo por un usuario normal (no permitido para instalación completa)
+    echo "ERROR: Este script necesita privilegios de root para instalar paquetes y configurar systemd." >&2
+    echo "Ejecútalo usando 'sudo bash install.sh' desde tu cuenta de usuario normal." >&2
+    exit 1
 fi
 
-if [ -z "$SUDO_USER" ] || [ "$SUDO_USER" == "root" ]; then
-  echo "ERROR: Por favor, ejecuta este script usando 'sudo' desde una cuenta de usuario NO root." >&2
-  echo "       No ejecutes este script directamente como usuario root o usando 'sudo su'." >&2
-  echo "       1. Sal de la sesión root (exit)" >&2
-  echo "       2. Loguéate como tu usuario normal" >&2
-  echo "       3. Ejecuta: sudo bash install.sh" >&2
-  exit 1
-fi
-
-# --- Variables (Ajustar si es necesario) ---
-# Usar $SUDO_USER como el usuario objetivo
-CURRENT_USER=$SUDO_USER
 
 # Determinar el directorio home del usuario
-USER_HOME=$(getent passwd "$CURRENT_USER" | cut -d: -f6)
-if [ -z "$USER_HOME" ]; then
-    echo "ERROR: No se pudo determinar el directorio home para el usuario '$CURRENT_USER'."
+# Si es root, usa /root, de lo contrario busca el home del usuario normal
+if [ "$CURRENT_USER" == "root" ]; then
+    USER_HOME="/root"
+else
+    USER_HOME=$(getent passwd "$CURRENT_USER" | cut -d: -f6)
+fi
+
+if [ -z "$USER_HOME" ] || [ ! -d "$USER_HOME" ]; then
+    echo "ERROR: No se pudo determinar un directorio home válido para el usuario '$CURRENT_USER'."
     exit 1
 fi
 
@@ -38,12 +44,8 @@ GITHUB_REPO_URL="https://github.com/sysdevfiles/ScriptManagerAccounts.git"
 
 
 echo "--- Iniciando Instalación del Bot Gestor de Cuentas para el usuario '$CURRENT_USER' ---"
+# ... (Verificación USER_HOME ya hecha arriba) ...
 echo "Directorio de instalación: $BOT_DIR"
-# Verificar si USER_HOME es válido
-if [ ! -d "$USER_HOME" ]; then
-    echo "ERROR: El directorio home '$USER_HOME' para el usuario '$CURRENT_USER' no existe o no es accesible."
-    exit 1
-fi
 
 # --- 0. Limpieza Opcional ---
 if [ -d "$BOT_DIR" ] || [ -f "/etc/systemd/system/${SERVICE_NAME}.service" ]; then
@@ -71,12 +73,20 @@ apt install -y $PYTHON_EXEC ${PYTHON_EXEC}-pip ${PYTHON_EXEC}-venv sqlite3 libsq
 # --- 2. Crear Directorio Padre (si es necesario, git clone crea el directorio final) ---
 echo "[2/8] Asegurando directorio padre $USER_HOME..."
 mkdir -p "$USER_HOME"
-chown "$CURRENT_USER:$CURRENT_USER" "$USER_HOME"
+# Si CURRENT_USER no es root, ajustar permisos. Si es root, ya tiene permisos.
+if [ "$CURRENT_USER" != "root" ]; then
+    chown "$CURRENT_USER:$CURRENT_USER" "$USER_HOME"
+fi
 
 # --- 3. Clonar Repositorio ---
 echo "[3/8] Clonando repositorio desde $GITHUB_REPO_URL..."
-# Clonar como el usuario actual en su directorio home
-sudo -u "$CURRENT_USER" git clone "$GITHUB_REPO_URL" "$BOT_DIR"
+# Clonar como el usuario CURRENT_USER (sea root o no)
+# Usamos 'runuser' o 'sudo -u' si CURRENT_USER no es root, sino directo.
+if [ "$CURRENT_USER" == "root" ]; then
+    git clone "$GITHUB_REPO_URL" "$BOT_DIR"
+else
+    sudo -u "$CURRENT_USER" git clone "$GITHUB_REPO_URL" "$BOT_DIR"
+fi
 if [ $? -ne 0 ]; then
     echo "ERROR: Falló la clonación del repositorio. Verifica la URL y los permisos."
     exit 1
@@ -99,9 +109,9 @@ echo '  # Inserte su ID de Telegram (obtenido de @userinfobot)'
 echo '  ADMIN_USER_ID="TU_ID_DE_USERINFOBOT"'
 echo ""
 echo "Puedes usar 'scp', 'rsync' o un cliente SFTP."
-echo "Ejemplo con nano para crear .env: sudo -u $CURRENT_USER nano $BOT_DIR/.env"
+echo "Ejemplo con nano para crear .env: nano $BOT_DIR/.env (si eres root) o sudo -u $CURRENT_USER nano $BOT_DIR/.env (si no eres root)"
 echo "Asegúrate de que el archivo .env tenga permisos de lectura para '$CURRENT_USER'."
-echo "Ejemplo: sudo chown $CURRENT_USER:$CURRENT_USER $BOT_DIR/.env && sudo chmod 600 $BOT_DIR/.env"
+echo "Ejemplo: chown $CURRENT_USER:$CURRENT_USER $BOT_DIR/.env && chmod 600 $BOT_DIR/.env"
 echo "---------------------------------------------------------------------"
 ENV_FILE_PATH="$BOT_DIR/.env" # Definir ruta explícita
 while true; do
@@ -110,7 +120,7 @@ while true; do
     if [ -f "$ENV_FILE_PATH" ]; then
         # Asegurar permisos correctos para .env ANTES de configurar systemd
         echo "Verificando permisos de $ENV_FILE_PATH..."
-        # Cambiar propietario primero
+        # Cambiar propietario (importante si se creó como root pero se correrá como otro user, o viceversa)
         chown "$CURRENT_USER:$CURRENT_USER" "$ENV_FILE_PATH"
         if [ $? -ne 0 ]; then
              echo "ADVERTENCIA: No se pudo cambiar el propietario de $ENV_FILE_PATH. Verifica los permisos manualmente."
@@ -130,8 +140,12 @@ done
 
 # --- 5. Entorno Virtual ---
 echo "[4/8] Creando entorno virtual..."
-# Ejecutar como el usuario propietario del directorio
-sudo -u "$CURRENT_USER" $PYTHON_EXEC -m venv "$BOT_DIR/venv"
+# Ejecutar como el usuario CURRENT_USER
+if [ "$CURRENT_USER" == "root" ]; then
+    $PYTHON_EXEC -m venv "$BOT_DIR/venv"
+else
+    sudo -u "$CURRENT_USER" $PYTHON_EXEC -m venv "$BOT_DIR/venv"
+fi
 if [ $? -ne 0 ]; then
     echo "ERROR: Falló la creación del entorno virtual."
     exit 1
@@ -145,8 +159,12 @@ fi
 
 # --- 6. Instalar Dependencias ---
 echo "[5/8] Instalando dependencias de Python..."
-# Activar venv y ejecutar pip como el usuario
-sudo -u "$CURRENT_USER" bash -c "source \"$BOT_DIR/venv/bin/activate\" && pip install --upgrade pip && pip install -r \"$BOT_DIR/requirements.txt\""
+# Activar venv y ejecutar pip como el usuario CURRENT_USER
+if [ "$CURRENT_USER" == "root" ]; then
+    bash -c "source \"$BOT_DIR/venv/bin/activate\" && pip install --upgrade pip && pip install -r \"$BOT_DIR/requirements.txt\""
+else
+    sudo -u "$CURRENT_USER" bash -c "source \"$BOT_DIR/venv/bin/activate\" && pip install --upgrade pip && pip install -r \"$BOT_DIR/requirements.txt\""
+fi
 if [ $? -ne 0 ]; then
     echo "ERROR: Falló la instalación de dependencias de Python."
     exit 1
@@ -156,23 +174,35 @@ fi
 echo "[6/8] Configurando servicio systemd ($SERVICE_NAME.service)..."
 SERVICE_FILE_PATH="/etc/systemd/system/${SERVICE_NAME}.service"
 # Asegurar permisos de ejecución para el script principal del bot
-chmod +x "$BOT_DIR/bot.py"
+# Ejecutar como CURRENT_USER si no es root
+if [ "$CURRENT_USER" == "root" ]; then
+    chmod +x "$BOT_DIR/bot.py"
+else
+    sudo -u "$CURRENT_USER" chmod +x "$BOT_DIR/bot.py"
+fi
 if [ $? -ne 0 ]; then
     echo "ADVERTENCIA: No se pudo asegurar permisos de ejecución para $BOT_DIR/bot.py."
 fi
 
+# Determinar User y Group para el servicio
+SERVICE_USER=$CURRENT_USER
+if [ "$CURRENT_USER" == "root" ]; then
+    SERVICE_GROUP="root" # Usar 'root' explícitamente como grupo para el usuario root
+else
+    SERVICE_GROUP=$CURRENT_USER # Usar el nombre del usuario como grupo para usuarios normales
+fi
+
 # Crear el archivo de servicio
-echo "Generando $SERVICE_FILE_PATH con User=$CURRENT_USER y Group=$CURRENT_USER..." # Mensaje actualizado
+echo "Generando $SERVICE_FILE_PATH con User=$SERVICE_USER y Group=$SERVICE_GROUP..."
 
 cat << EOF > "$SERVICE_FILE_PATH"
 [Unit]
-Description=Telegram Account Manager Bot (user $CURRENT_USER)
+Description=Telegram Account Manager Bot (user $SERVICE_USER)
 After=network.target
 
 [Service]
-User=$CURRENT_USER
-# Usar el nombre de usuario también para el grupo
-Group=$CURRENT_USER
+User=$SERVICE_USER
+Group=$SERVICE_GROUP
 WorkingDirectory=$BOT_DIR
 # Usar la ruta completa al python del venv
 ExecStart=$BOT_DIR/venv/bin/python $BOT_DIR/bot.py
