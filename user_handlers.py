@@ -2,7 +2,9 @@ import logging
 from datetime import datetime, timedelta
 import time
 import os
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardRemove
+import tempfile
+import re # Importar re para parseo
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardRemove, InputFile # Importar InputFile
 from telegram.ext import (
     ContextTypes,
     ConversationHandler,
@@ -32,6 +34,11 @@ SELECT_ACCOUNT_TO_DELETE, CONFIRM_DELETE = range(14, 16)
 # editmyaccount
 CALLBACK_EDIT_MY_ACCOUNT = "edit_my_account"
 SELECT_ACCOUNT_TO_EDIT, CHOOSE_EDIT_FIELD, GET_NEW_EMAIL, GET_NEW_PIN = range(16, 20)
+# Backup
+CALLBACK_BACKUP_MY_ACCOUNTS = "backup_my_accounts"
+# Import
+CALLBACK_IMPORT_MY_ACCOUNTS = "import_my_accounts"
+GET_BACKUP_FILE, CONFIRM_IMPORT = range(20, 22) # Nuevos estados
 
 # Lista de servicios predefinidos
 STREAMING_SERVICES = ["Netflix", "HBO Max", "Spotify", "Disney Plus", "Paramount Plus", "Prime Video", "YouTube Premium", "Crunchyroll", "Otro"]
@@ -42,7 +49,7 @@ def get_main_menu_keyboard(is_admin: bool, is_authorized: bool) -> InlineKeyboar
     """Genera el teclado del menú principal según el rol y autorización."""
     keyboard = []
     # Opciones comunes si está autorizado o es admin
-    if is_authorized or is_admin:
+    if is_authorized or is_admin: # Corregido: 'or' en lugar de '()' innecesarios
         keyboard.extend([
             [InlineKeyboardButton("📊 Estado", callback_data='show_status')],
             [InlineKeyboardButton("📋 Mis Cuentas", callback_data='list_accounts')],
@@ -52,6 +59,8 @@ def get_main_menu_keyboard(is_admin: bool, is_authorized: bool) -> InlineKeyboar
              keyboard.append([InlineKeyboardButton("➕ Añadir Mi Cuenta", callback_data=CALLBACK_ADD_MY_ACCOUNT)])
              keyboard.append([InlineKeyboardButton("✏️ Editar Mi Cuenta", callback_data=CALLBACK_EDIT_MY_ACCOUNT)])
              keyboard.append([InlineKeyboardButton("🗑️ Eliminar Mi Cuenta", callback_data=CALLBACK_DELETE_MY_ACCOUNT)])
+             keyboard.append([InlineKeyboardButton("💾 Backup Mis Cuentas", callback_data=CALLBACK_BACKUP_MY_ACCOUNTS)]) # <-- Nuevo botón
+             keyboard.append([InlineKeyboardButton("📥 Importar Backup", callback_data=CALLBACK_IMPORT_MY_ACCOUNTS)]) # <-- Nuevo botón
 
     # Opciones solo para Admin
     if is_admin:
@@ -259,6 +268,7 @@ async def get_account(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         try:
             # Siempre enviar por privado
             await context.bot.send_message(chat_id=user_id, text=message, parse_mode=ParseMode.MARKDOWN)
+            # Corregido: 'and' en lugar de '&&'
             if update.message and update.message.chat.type != 'private':
                  confirmation_msg = await update.message.reply_text("✅ Te he enviado los detalles por mensaje privado.")
             logger.info(f"🔑 Usuario {user_id} solicitó detalles con /get")
@@ -338,6 +348,82 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     elif update.message:
         await update.message.reply_text(text=message, parse_mode=ParseMode.MARKDOWN, reply_markup=final_keyboard)
 
+# --- Nueva Función: Backup Cuentas Propias ---
+async def backup_my_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """(Autorizados) Genera y envía un backup de las cuentas propias activas."""
+    query = update.callback_query
+    user_id = update.effective_user.id
+    is_callback = bool(query)
+    if is_callback: await query.answer()
+
+    logger.info(f"backup_my_accounts: user_id={user_id}, is_callback={is_callback}")
+
+    is_admin_user = (ADMIN_USER_ID is not None and user_id == ADMIN_USER_ID)
+    is_authorized = db.is_user_authorized(user_id)
+
+    if not is_authorized or is_admin_user: # Solo usuarios autorizados NO admin
+        await _send_or_edit_message(update, context, "⛔ Esta función es solo para usuarios autorizados.", get_back_to_menu_keyboard())
+        return
+
+    try:
+        user_accounts = db.get_accounts_for_user(user_id)
+        if not user_accounts:
+            await _send_or_edit_message(update, context, "ℹ️ No tienes cuentas propias activas para hacer backup.", get_back_to_menu_keyboard())
+            return
+
+        # Formatear datos para el archivo
+        backup_content = f"Backup de Cuentas para Usuario ID: {user_id}\n"
+        backup_content += f"Fecha: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+        backup_content += "=" * 30 + "\n\n"
+
+        for acc in user_accounts:
+            expiry_date = datetime.fromtimestamp(acc['expiry_ts']).strftime('%d/%m/%Y') if acc.get('expiry_ts') else 'N/A'
+            backup_content += f"ID Cuenta: {acc.get('id', 'N/A')}\n"
+            backup_content += f"Servicio: {acc.get('service', 'N/A')}\n"
+            backup_content += f"Email: {acc.get('email', 'N/A')}\n"
+            backup_content += f"Perfil: {acc.get('profile_name', 'N/A')}\n"
+            backup_content += f"PIN: {acc.get('pin', 'N/A')}\n"
+            backup_content += f"Expira: {expiry_date}\n"
+            backup_content += "-" * 30 + "\n"
+
+        # Crear archivo temporal
+        with tempfile.NamedTemporaryFile(mode='w+', delete=False, suffix='.txt', encoding='utf-8') as temp_file:
+            temp_file.write(backup_content)
+            temp_file_path = temp_file.name
+            file_name = f"backup_cuentas_{user_id}_{datetime.now().strftime('%Y%m%d')}.txt"
+
+        logger.info(f"Archivo de backup temporal creado en: {temp_file_path}")
+
+        # Enviar archivo
+        try:
+            with open(temp_file_path, 'rb') as file_to_send:
+                await context.bot.send_document(
+                    chat_id=user_id,
+                    document=InputFile(file_to_send, filename=file_name),
+                    caption="📄 Aquí tienes el backup de tus cuentas activas.",
+                    reply_markup=get_back_to_menu_keyboard() # Añadir botón volver después de enviar
+                )
+            logger.info(f"Backup enviado a user_id {user_id}.")
+            # Si se envió desde un botón, editar el mensaje original para quitar el menú de backup
+            if is_callback:
+                 try:
+                     await query.edit_message_text("Backup enviado. Revisa tus mensajes.", reply_markup=get_back_to_menu_keyboard())
+                 except BadRequest: pass # Ignorar si no se puede editar
+        except Exception as send_error:
+            logger.error(f"Error al enviar archivo de backup a {user_id}: {send_error}", exc_info=True)
+            await _send_or_edit_message(update, context, "⚠️ Ocurrió un error al enviar el archivo de backup.", get_back_to_menu_keyboard())
+        finally:
+            # Limpiar archivo temporal
+            try:
+                os.remove(temp_file_path)
+                logger.info(f"Archivo de backup temporal eliminado: {temp_file_path}")
+            except OSError as e:
+                logger.error(f"Error al eliminar archivo temporal {temp_file_path}: {e}")
+
+    except Exception as e:
+        logger.error(f"Error al procesar backup_my_accounts para {user_id}: {e}", exc_info=True)
+        await _send_or_edit_message(update, context, "⚠️ Ocurrió un error al generar el backup.", get_back_to_menu_keyboard())
+
 # --- Conversación: Añadir Cuenta Propia (/addmyaccount) ---
 
 async def add_my_account_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -348,7 +434,8 @@ async def add_my_account_start(update: Update, context: ContextTypes.DEFAULT_TYP
     is_admin = (ADMIN_USER_ID is not None and user_id == ADMIN_USER_ID)
 
     if not is_authorized or is_admin:
-        await update.message.reply_text("⛔ Esta función es solo para usuarios autorizados.")
+        # Usar _send_or_edit_message para consistencia
+        await _send_or_edit_message(update, context, "⛔ Esta función es solo para usuarios autorizados.", get_back_to_menu_keyboard())
         return ConversationHandler.END
 
     logger.info(f"User {user_id} iniciando conversación add_my_account.")
@@ -358,13 +445,15 @@ async def add_my_account_start(update: Update, context: ContextTypes.DEFAULT_TYP
         buttons.append([InlineKeyboardButton(service, callback_data=f"service_{service}")])
     service_keyboard = InlineKeyboardMarkup(buttons)
 
-    await update.message.reply_text(
+    # Definir el texto del mensaje
+    message_text = (
         "➕ Ok, vamos a añadir un perfil de cuenta.\n"
         "1️⃣ Por favor, selecciona el *Servicio* de la lista 👇:\n\n"
-        "Puedes cancelar en cualquier momento con /cancel.",
-        reply_markup=service_keyboard,
-        parse_mode=ParseMode.MARKDOWN
+        "Puedes cancelar en cualquier momento con /cancel."
     )
+    # Usar _send_or_edit_message para enviar/editar el mensaje inicial
+    await _send_or_edit_message(update, context, message_text, service_keyboard, schedule_delete=False) # No borrar el menú de selección
+
     return SELECT_SERVICE
 
 async def received_service_selection(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -846,6 +935,188 @@ editmyaccount_conv_handler = ConversationHandler(
         GET_NEW_PIN: [MessageHandler(filters.TEXT & ~filters.COMMAND, received_new_pin)],
     },
     fallbacks=[CommandHandler("cancel", cancel_edit_my_account)],
+    allow_reentry=True
+)
+
+# --- Conversación: Importar Cuentas Propias (/importmyaccounts) ---
+
+async def import_my_accounts_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Inicia la conversación para importar cuentas desde un backup."""
+    user = update.effective_user
+    user_id = user.id
+    is_authorized = db.is_user_authorized(user_id)
+    # Corregido: 'and' en lugar de '&&'
+    is_admin = (ADMIN_USER_ID is not None and user_id == ADMIN_USER_ID)
+
+    if not is_authorized or is_admin:
+        await _send_or_edit_message(update, context, "⛔ Esta función es solo para usuarios autorizados.", get_back_to_menu_keyboard())
+        return ConversationHandler.END
+
+    logger.info(f"User {user_id} iniciando conversación import_my_accounts.")
+    message_text = (
+        "📥 Ok, vamos a importar cuentas desde un archivo de backup (.txt).\n"
+        "Por favor, envíame el archivo de texto que descargaste previamente.\n\n"
+        "Puedes cancelar en cualquier momento con /cancel."
+    )
+    await _send_or_edit_message(update, context, message_text, None, schedule_delete=False) # No borrar este mensaje
+    return GET_BACKUP_FILE
+
+async def received_backup_file(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Recibe el archivo de backup, lo parsea y pide confirmación."""
+    user_id = update.effective_user.id
+    document = update.message.document
+
+    if not document or not document.file_name.lower().endswith('.txt'):
+        await update.message.reply_text("❌ Por favor, envía un archivo de texto (.txt) válido.")
+        return GET_BACKUP_FILE
+
+    try:
+        backup_file = await document.get_file()
+        # Descargar a un archivo temporal en memoria (bytes)
+        file_content_bytes = await backup_file.download_as_bytearray()
+        file_content = file_content_bytes.decode('utf-8')
+
+        # Parsear el contenido
+        parsed_accounts = []
+        current_account = {}
+        # Regex más robustos para extraer datos
+        service_re = re.compile(r"^\s*Servicio:\s*(.+)$", re.IGNORECASE)
+        email_re = re.compile(r"^\s*Email:\s*(.+)$", re.IGNORECASE)
+        profile_re = re.compile(r"^\s*Perfil:\s*(.+)$", re.IGNORECASE)
+        pin_re = re.compile(r"^\s*PIN:\s*(.+)$", re.IGNORECASE)
+
+        for line in file_content.splitlines():
+            line = line.strip()
+            if not line or line.startswith("Backup de Cuentas") or line.startswith("Fecha:") or line.startswith("="):
+                continue
+
+            service_match = service_re.match(line)
+            email_match = email_re.match(line)
+            profile_match = profile_re.match(line)
+            pin_match = pin_re.match(line)
+
+            if service_match:
+                current_account['service'] = service_match.group(1).strip()
+            elif email_match:
+                current_account['email'] = email_match.group(1).strip()
+            elif profile_match:
+                current_account['profile_name'] = profile_match.group(1).strip()
+            elif pin_match:
+                current_account['pin'] = pin_match.group(1).strip()
+
+            # Si tenemos todos los datos necesarios y encontramos la línea separadora o el final
+            if all(k in current_account for k in ('service', 'email', 'profile_name', 'pin')) and (line.startswith("-") or line == ""):
+                # Validar datos básicos (ej. email)
+                if '@' in current_account['email'] and '.' in current_account['email'].split('@')[-1]:
+                    parsed_accounts.append(current_account)
+                else:
+                    logger.warning(f"Cuenta omitida en importación por email inválido: {current_account}")
+                current_account = {} # Reset para la siguiente cuenta
+
+        # Añadir la última cuenta si no hubo separador al final
+        if all(k in current_account for k in ('service', 'email', 'profile_name', 'pin')) and '@' in current_account['email']:
+             parsed_accounts.append(current_account)
+
+        if not parsed_accounts:
+            await update.message.reply_text("❌ No se encontraron cuentas válidas en el archivo o el formato es incorrecto.", reply_markup=get_back_to_menu_keyboard())
+            return ConversationHandler.END
+
+        context.user_data['parsed_accounts'] = parsed_accounts
+        logger.info(f"User {user_id} - Backup parseado: {len(parsed_accounts)} cuentas encontradas.")
+
+        # Mostrar resumen y pedir confirmación
+        summary_text = f"📄 Se encontraron {len(parsed_accounts)} cuentas en el archivo:\n\n"
+        for i, acc in enumerate(parsed_accounts[:5]): # Mostrar las primeras 5 como ejemplo
+            summary_text += f"- {db.escape_markdown(acc['service'])} ({db.escape_markdown(acc['profile_name'])})\n"
+        if len(parsed_accounts) > 5:
+            summary_text += "- ... y más.\n\n"
+        summary_text += "¿Deseas importar/actualizar estas cuentas? Se establecerá una nueva validez de 30 días."
+
+        confirm_keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("✅ Sí, importar", callback_data="import_confirm_yes")],
+            [InlineKeyboardButton("❌ No, cancelar", callback_data="import_confirm_no")]
+        ])
+
+        await update.message.reply_text(summary_text, reply_markup=confirm_keyboard, parse_mode=ParseMode.MARKDOWN)
+        return CONFIRM_IMPORT
+
+    except Exception as e:
+        logger.error(f"Error procesando archivo de backup para user {user_id}: {e}", exc_info=True)
+        await update.message.reply_text("❌ Ocurrió un error al leer o procesar el archivo. Asegúrate de que es el archivo correcto y está en formato UTF-8.", reply_markup=get_back_to_menu_keyboard())
+        return ConversationHandler.END
+
+async def confirm_import(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Confirma o cancela la importación de las cuentas parseadas."""
+    query = update.callback_query
+    await query.answer()
+    user_id = query.from_user.id
+    confirmation = query.data
+    parsed_accounts = context.user_data.get('parsed_accounts')
+
+    if not parsed_accounts:
+         logger.error(f"User {user_id} en confirm_import: Faltan parsed_accounts.")
+         await query.edit_message_text("❌ Error interno. Intenta de nuevo.", reply_markup=get_back_to_menu_keyboard())
+         context.user_data.clear()
+         return ConversationHandler.END
+
+    if confirmation == "import_confirm_yes":
+        logger.info(f"User {user_id} confirma importar {len(parsed_accounts)} cuentas.")
+        imported_count = 0
+        failed_count = 0
+        registration_ts = int(time.time())
+        expiry_ts = registration_ts + (30 * 24 * 60 * 60) # Nueva validez de 30 días
+
+        for acc in parsed_accounts:
+            success = db.add_account_db(
+                user_id=user_id,
+                service=acc['service'],
+                email=acc['email'],
+                profile_name=acc['profile_name'],
+                pin=acc['pin'],
+                registration_ts=registration_ts,
+                expiry_ts=expiry_ts
+            )
+            if success:
+                imported_count += 1
+            else:
+                failed_count += 1
+
+        confirmation_text = f"✅ Importación completada.\n" \
+                            f"- Cuentas importadas/actualizadas: {imported_count}\n"
+        if failed_count > 0:
+             confirmation_text += f"- Cuentas fallidas (error interno o duplicado no actualizable): {failed_count}"
+
+        await _send_or_edit_message(update, context, confirmation_text, get_back_to_menu_keyboard(), schedule_delete=True)
+
+    else: # import_confirm_no
+        logger.info(f"User {user_id} canceló la importación.")
+        await _send_or_edit_message(update, context, "❌ Importación cancelada.", get_back_to_menu_keyboard(), schedule_delete=True)
+
+    context.user_data.clear()
+    return ConversationHandler.END
+
+async def cancel_import(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Cancela la conversación de importar cuentas."""
+    user_id = update.effective_user.id
+    logger.info(f"User {user_id} canceló la conversación import_my_accounts.")
+    await _send_or_edit_message(update, context, "Operación cancelada.", None, schedule_delete=True)
+    context.user_data.clear()
+    return ConversationHandler.END
+
+importmyaccounts_conv_handler = ConversationHandler(
+    entry_points=[
+        CommandHandler("importmyaccounts", import_my_accounts_start),
+        CallbackQueryHandler(import_my_accounts_start, pattern=f"^{CALLBACK_IMPORT_MY_ACCOUNTS}$")
+    ],
+    states={
+        GET_BACKUP_FILE: [MessageHandler(filters.Document.TXT, received_backup_file)],
+        CONFIRM_IMPORT: [CallbackQueryHandler(confirm_import, pattern="^import_confirm_")],
+    },
+    fallbacks=[
+        CommandHandler("cancel", cancel_import),
+        # Añadir un manejador para mensajes que no son el archivo esperado
+        MessageHandler(filters.TEXT & ~filters.COMMAND, lambda u, c: u.message.reply_text("Por favor, envía el archivo .txt o usa /cancel.")),
+    ],
     allow_reentry=True
 )
 

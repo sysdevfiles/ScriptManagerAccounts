@@ -10,7 +10,7 @@ import user_handlers
 import admin_handlers
 from admin_handlers import adduser_conv_handler # Solo queda esta conversación de admin
 # Importar nuevas conversaciones de usuario
-from user_handlers import addmyaccount_conv_handler, deletemyaccount_conv_handler, editmyaccount_conv_handler
+from user_handlers import addmyaccount_conv_handler, deletemyaccount_conv_handler, editmyaccount_conv_handler, importmyaccounts_conv_handler
 import callback_handlers
 
 # Cargar variables de entorno
@@ -56,9 +56,12 @@ def main() -> None:
     application.add_handler(CommandHandler("status", user_handlers.status_command))
     application.add_handler(CommandHandler("list", user_handlers.list_accounts))
     application.add_handler(CommandHandler("get", user_handlers.get_account))
+    application.add_handler(CommandHandler("backupmyaccounts", user_handlers.backup_my_accounts)) # <-- Nuevo comando
+    application.add_handler(CommandHandler("importmyaccounts", user_handlers.import_my_accounts_start)) # <-- Nuevo comando
     application.add_handler(addmyaccount_conv_handler) # Añadir nueva conversación de usuario
     application.add_handler(deletemyaccount_conv_handler) # Añadir handler de eliminar
     application.add_handler(editmyaccount_conv_handler) # Añadir handler de editar
+    application.add_handler(importmyaccounts_conv_handler) # <-- Nueva conversación
 
     # Comandos/Conversaciones de Admin (desde admin_handlers.py)
     application.add_handler(adduser_conv_handler)

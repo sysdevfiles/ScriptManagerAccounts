@@ -28,6 +28,8 @@ CALLBACK_BACK_TO_MENU = "back_to_menu"
 CALLBACK_ADD_MY_ACCOUNT = "add_my_account"
 CALLBACK_EDIT_MY_ACCOUNT = "edit_my_account" # Nueva constante
 CALLBACK_DELETE_MY_ACCOUNT = "delete_my_account" # Nueva constante
+CALLBACK_BACKUP_MY_ACCOUNTS = "backup_my_accounts" # Nueva constante
+CALLBACK_IMPORT_MY_ACCOUNTS = "import_my_accounts" # Nueva constante
 
 # --- Funciones de Menú con Botones ---
 def get_back_to_menu_keyboard() -> InlineKeyboardMarkup:
@@ -44,7 +46,6 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
     user_id = query.from_user.id
 
     is_admin_user = (ADMIN_USER_ID is not None and user_id == ADMIN_USER_ID)
-    # Necesitamos saber si está autorizado para el menú de vuelta
     is_authorized = db.is_user_authorized(user_id)
 
     # --- Handlers de Usuario ---
@@ -52,36 +53,39 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
         await user_handlers.status_command(update, context)
     elif callback_data == CALLBACK_LIST_ACCOUNTS:
         await user_handlers.list_accounts(update, context)
-    # --- Nuevo Handler para Botón de Usuario ---
+    # --- Simplificar Handlers para Botones de Conversación de Usuario ---
     elif callback_data == CALLBACK_ADD_MY_ACCOUNT:
         if is_authorized and not is_admin_user:
-             # Iniciar la conversación desde user_handlers
-             # Necesitamos simular un mensaje para iniciar ConversationHandler desde CallbackQuery
-             # O modificar ConversationHandler para aceptar CallbackQueryHandler en entry_points (ya hecho)
-             # await add_my_account_start(update, context) # Llamar directamente debería funcionar si entry_points lo maneja
-             # No es necesario llamar explícitamente si el entry_point del ConversationHandler ya lo captura
-             logger.info(f"Callback {CALLBACK_ADD_MY_ACCOUNT} recibido, dejando que ConversationHandler lo tome.")
-             # Podríamos editar el mensaje para confirmar inicio si el CH no lo hace
-             try:
-                 await query.edit_message_text("➕ Iniciando proceso para añadir cuenta...", reply_markup=None)
-             except BadRequest: pass # Ignorar si no se puede editar
+             # No hacer nada aquí, dejar que el ConversationHandler lo capture
+             logger.debug(f"Callback {CALLBACK_ADD_MY_ACCOUNT} recibido, dejando que ConversationHandler lo tome.")
         else:
+             # Mantener el manejo de acceso denegado
              try: await query.edit_message_text(text="⛔ Acción no permitida.", reply_markup=get_back_to_menu_keyboard())
              except BadRequest: pass
-    # --- Nuevos Handlers para Botones de Usuario ---
     elif callback_data == CALLBACK_EDIT_MY_ACCOUNT:
         if is_authorized and not is_admin_user:
-             logger.info(f"Callback {CALLBACK_EDIT_MY_ACCOUNT} recibido, dejando que ConversationHandler lo tome.")
-             try: await query.edit_message_text("✏️ Iniciando proceso para editar cuenta...", reply_markup=None)
-             except BadRequest: pass
+             logger.debug(f"Callback {CALLBACK_EDIT_MY_ACCOUNT} recibido, dejando que ConversationHandler lo tome.")
         else:
              try: await query.edit_message_text(text="⛔ Acción no permitida.", reply_markup=get_back_to_menu_keyboard())
              except BadRequest: pass
     elif callback_data == CALLBACK_DELETE_MY_ACCOUNT:
         if is_authorized and not is_admin_user:
-             logger.info(f"Callback {CALLBACK_DELETE_MY_ACCOUNT} recibido, dejando que ConversationHandler lo tome.")
-             try: await query.edit_message_text("🗑️ Iniciando proceso para eliminar cuenta...", reply_markup=None)
+             logger.debug(f"Callback {CALLBACK_DELETE_MY_ACCOUNT} recibido, dejando que ConversationHandler lo tome.")
+        else:
+             try: await query.edit_message_text(text="⛔ Acción no permitida.", reply_markup=get_back_to_menu_keyboard())
              except BadRequest: pass
+    # --- Nuevo Handler para Botón de Backup ---
+    elif callback_data == CALLBACK_BACKUP_MY_ACCOUNTS:
+        if is_authorized and not is_admin_user:
+             await user_handlers.backup_my_accounts(update, context)
+        else:
+             try: await query.edit_message_text(text="⛔ Acción no permitida.", reply_markup=get_back_to_menu_keyboard())
+             except BadRequest: pass
+    # --- Nuevo Handler para Botón de Importar ---
+    elif callback_data == CALLBACK_IMPORT_MY_ACCOUNTS:
+        if is_authorized and not is_admin_user:
+             logger.debug(f"Callback {CALLBACK_IMPORT_MY_ACCOUNTS} recibido, dejando que ConversationHandler lo tome.")
+             # No hacer nada aquí, dejar que el ConversationHandler lo capture
         else:
              try: await query.edit_message_text(text="⛔ Acción no permitida.", reply_markup=get_back_to_menu_keyboard())
              except BadRequest: pass

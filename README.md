@@ -250,6 +250,10 @@ Si deseas probar el bot en tu máquina local antes de desplegarlo:
 *   `/list`: Muestra un resumen de los perfiles propios que has añadido y están activos.
 *   `/get`: Te envía por privado los detalles (Email, Perfil y PIN) de tus perfiles activos.
 *   `/addmyaccount`: Inicia el proceso interactivo para añadir un nuevo perfil (tendrá 30 días de validez).
+*   `/editmyaccount`: Inicia el proceso interactivo para editar el Email o PIN de un perfil propio.
+*   `/deletemyaccount`: Inicia el proceso interactivo para eliminar un perfil propio.
+*   `/backupmyaccounts`: Genera y te envía un archivo `.txt` con la información de tus cuentas activas.
+*   `/importmyaccounts`: Inicia el proceso interactivo para importar/actualizar cuentas desde un archivo `.txt` de backup (las cuentas importadas tendrán 30 días de validez).
 
 **Comandos Solo para Administrador:**
 
@@ -258,10 +262,11 @@ Si deseas probar el bot en tu máquina local antes de desplegarlo:
 *   `/listallaccounts`: Muestra todos los perfiles registrados por todos los usuarios, incluyendo su `ID` único, dueño y fecha de caducidad.
 
 ## Próximos Pasos / Mejoras Posibles
+*   **Backup Admin:** Añadir comando `/backupallaccounts` para que el admin genere un backup de todas las cuentas.
+*   **Restaurar Backup (Admin):** Funcionalidad para que el admin restaure cuentas desde un archivo (más complejo, requiere mapeo de user_id).
 *   **Cifrado de PINs:** Implementar cifrado para el PIN en la base de datos.
-*   **Eliminar Cuentas Propias:** Añadir comando `/deletemyaccount <account_id>` para usuarios.
 *   **Eliminar Cuentas (Admin):** Añadir comando `/deleteaccount <account_id>` para admin.
 *   **Eliminar Usuarios (Admin):** Añadir comando `/deleteuser <user_id>` para admin.
-*   **Modificar Cuentas/Usuarios:** Comandos para editar entradas existentes.
+*   **Modificar Usuarios (Admin):** Comando para editar nombre o días de un usuario existente.
 *   **Notificaciones:** Avisar a usuarios antes de que expire su permiso general o sus cuentas.
-*   **Gestión de Errores:** Mejorar el manejo de errores específicos.
+*   **Gestión de Errores:** Mejorar el manejo de errores específicos y el parseo de archivos.
