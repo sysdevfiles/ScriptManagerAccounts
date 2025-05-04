@@ -268,28 +268,54 @@ async def delete_user_start(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     """Inicia la conversación para eliminar un usuario autorizado (vía comando o botón)."""
     admin_id = update.effective_user.id
     is_callback = update.callback_query is not None
-    logger.info(f"Admin {admin_id} iniciando conversación delete_user (is_callback: {is_callback}).")
+    # Log de entrada
+    logger.info(f"Admin {admin_id} iniciando delete_user_start (is_callback: {is_callback}).")
     if is_callback:
-        await update.callback_query.answer() # Responder al callback si viene de botón
+        try:
+            await update.callback_query.answer() # Responder al callback si viene de botón
+            logger.debug("Callback query answered in delete_user_start.")
+        except Exception as e:
+            logger.error(f"Error answering callback query in delete_user_start: {e}")
 
-    users = db.list_users_db()
-    active_users = [u for u in users if u['user_id'] != admin_id] # No permitir eliminar al propio admin
+    try:
+        users = db.list_users_db()
+        # Log después de obtener usuarios
+        logger.debug(f"delete_user_start: Fetched {len(users)} users from DB.")
 
-    if not active_users:
-        message_text = "ℹ️ No hay otros usuarios registrados para eliminar."
-        keyboard = get_back_to_menu_keyboard()
-        await _send_paginated_or_edit(update, context, message_text, keyboard)
+        active_users = [u for u in users if u['user_id'] != admin_id] # No permitir eliminar al propio admin
+        # Log después de filtrar usuarios
+        logger.debug(f"delete_user_start: Found {len(active_users)} active users (excluding admin).")
+
+        if not active_users:
+            message_text = "ℹ️ No hay otros usuarios registrados para eliminar."
+            keyboard = get_back_to_menu_keyboard()
+            logger.info("delete_user_start: No active users found to delete. Sending info message.")
+            await _send_paginated_or_edit(update, context, message_text, keyboard)
+            return ConversationHandler.END
+
+        buttons = []
+        for user in active_users:
+            label = f"ID: {user['user_id']} - {user['name']}"
+            buttons.append([InlineKeyboardButton(label, callback_data=f"deluser_{user['user_id']}")])
+
+        users_keyboard = InlineKeyboardMarkup(buttons)
+        message_text = "🗑️ Selecciona el usuario que deseas eliminar 👇:\n\nPuedes cancelar con /cancel." # Añadido texto inicial
+
+        # Log antes de enviar/editar mensaje
+        logger.debug("delete_user_start: Preparing to send user list for deletion.")
+        await _send_paginated_or_edit(update, context, message_text, users_keyboard)
+        logger.info("delete_user_start: User list sent. Returning SELECT_USER_TO_DELETE.")
+        return SELECT_USER_TO_DELETE
+
+    except Exception as e:
+        # Log de error general en la función
+        logger.error(f"Error in delete_user_start: {e}", exc_info=True)
+        error_message = "❌ Ocurrió un error al iniciar el proceso de eliminación."
+        try:
+            await _send_paginated_or_edit(update, context, error_message, get_back_to_menu_keyboard())
+        except Exception as send_e:
+            logger.error(f"Failed to send error message in delete_user_start: {send_e}")
         return ConversationHandler.END
-
-    buttons = []
-    for user in active_users:
-        label = f"ID: {user['user_id']} - {user['name']}"
-        buttons.append([InlineKeyboardButton(label, callback_data=f"deluser_{user['user_id']}")])
-
-    users_keyboard = InlineKeyboardMarkup(buttons)
-
-    await _send_paginated_or_edit(update, context, message_text, users_keyboard)
-    return SELECT_USER_TO_DELETE
 
 async def received_user_delete_selection(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Recibe la selección del usuario a eliminar, pide confirmación."""
@@ -343,6 +369,7 @@ async def confirm_user_delete(update: Update, context: ContextTypes.DEFAULT_TYPE
     query = update.callback_query
     await query.answer()
     admin_id = query.from_user.id
+    is_callback = bool(query) # Define is_callback here
     confirmation = query.data
     user_id_to_delete = context.user_data.get('delete_user_id')
     job_queue = context.job_queue
@@ -373,15 +400,17 @@ async def confirm_user_delete(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     else: # deleteuser_confirm_no
         logger.info(f"Admin {admin_id} canceló la eliminación del usuario ID {user_id_to_delete}.")
-        await _send_paginated_or_edit(update, context, "❌ Eliminación cancelada.", get_back_to_menu_keyboard())
+    if is_callback:
+        await update.callback_query.answer()
 
-    context.user_data.clear()
-    return ConversationHandler.END
+    context.user_data.clear() # Limpiar datos de la conversación
+    return ConversationHandler.END # Terminar la conversación aquí
 
+# Definir el ConversationHandler para deleteuser
 deleteuser_conv_handler = ConversationHandler(
     entry_points=[
         CommandHandler("deleteuser", delete_user_start),
-        CallbackQueryHandler(delete_user_start, pattern=f"^{CALLBACK_ADMIN_DELETE_USER_START}$") # Añadir entrada por botón
+        CallbackQueryHandler(delete_user_start, pattern=f"^{CALLBACK_ADMIN_DELETE_USER_START}$")
         ],
     states={
         SELECT_USER_TO_DELETE: [CallbackQueryHandler(received_user_delete_selection, pattern="^deluser_")],
@@ -391,36 +420,52 @@ deleteuser_conv_handler = ConversationHandler(
     allow_reentry=True
 )
 
-# --- Conversación: Editar Usuario (/edituser o botón) ---
+
+# --- Conversación: Editar Usuario (/edituser) ---
 
 @admin_required
 async def edit_user_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Inicia la conversación para editar un usuario autorizado."""
+    """Inicia la conversación para editar un usuario autorizado (vía comando o botón)."""
     admin_id = update.effective_user.id
     is_callback = update.callback_query is not None
-    logger.info(f"Admin {admin_id} iniciando conversación edit_user (is_callback: {is_callback}).")
+    logger.info(f"Admin {admin_id} iniciando edit_user_start (is_callback: {is_callback}).")
     if is_callback:
-        await update.callback_query.answer()
+        try:
+            await update.callback_query.answer()
+            logger.debug("Callback query answered in edit_user_start.")
+        except Exception as e:
+            logger.error(f"Error answering callback query in edit_user_start: {e}")
 
-    users = db.list_users_db()
-    editable_users = [u for u in users if u['user_id'] != admin_id] # No permitir editar al propio admin
+    try:
+        users = db.list_users_db()
+        editable_users = [u for u in users if u['user_id'] != admin_id] # No permitir editar al propio admin
 
-    if not editable_users:
-        message_text = "ℹ️ No hay otros usuarios registrados para editar."
-        keyboard = get_back_to_menu_keyboard()
-        await _send_paginated_or_edit(update, context, message_text, keyboard)
+        if not editable_users:
+            message_text = "ℹ️ No hay otros usuarios registrados para editar."
+            keyboard = get_back_to_menu_keyboard()
+            await _send_paginated_or_edit(update, context, message_text, keyboard)
+            return ConversationHandler.END
+
+        buttons = []
+        for user in editable_users:
+            label = f"ID: {user['user_id']} - {user['name']}"
+            buttons.append([InlineKeyboardButton(label, callback_data=f"edituser_{user['user_id']}")])
+
+        users_keyboard = InlineKeyboardMarkup(buttons)
+        message_text = "✏️ Selecciona el usuario que deseas editar 👇:\n\nPuedes cancelar con /cancel."
+
+        await _send_paginated_or_edit(update, context, message_text, users_keyboard, schedule_delete=False) # No borrar lista de selección
+        return SELECT_USER_TO_EDIT
+
+    except Exception as e:
+        logger.error(f"Error in edit_user_start: {e}", exc_info=True)
+        error_message = "❌ Ocurrió un error al iniciar el proceso de edición."
+        try:
+            await _send_paginated_or_edit(update, context, error_message, get_back_to_menu_keyboard())
+        except Exception as send_e:
+            logger.error(f"Failed to send error message in edit_user_start: {send_e}")
         return ConversationHandler.END
 
-    buttons = []
-    for user in editable_users:
-        label = f"ID: {user['user_id']} - {user['name']}"
-        buttons.append([InlineKeyboardButton(label, callback_data=f"edituser_{user['user_id']}")])
-
-    message_text = "✏️ Selecciona el usuario que deseas editar 👇:\n\nPuedes cancelar con /cancel."
-    users_keyboard = InlineKeyboardMarkup(buttons)
-
-    await _send_paginated_or_edit(update, context, message_text, users_keyboard, schedule_delete=False)
-    return SELECT_USER_TO_EDIT
 
 async def received_user_edit_selection(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Recibe la selección del usuario a editar, pide qué campo editar."""
@@ -428,6 +473,9 @@ async def received_user_edit_selection(update: Update, context: ContextTypes.DEF
     await query.answer()
     user_id_to_edit_str = query.data.split("edituser_")[-1]
     admin_id = query.from_user.id
+
+    # Añadir logging para depurar el valor recibido
+    logger.debug(f"received_user_edit_selection: Received query.data='{query.data}', parsed user_id_str='{user_id_to_edit_str}'")
 
     try:
         user_id_to_edit = int(user_id_to_edit_str)
@@ -454,7 +502,8 @@ async def received_user_edit_selection(update: Update, context: ContextTypes.DEF
         )
         return CHOOSE_FIELD_TO_EDIT
     except ValueError:
-        logger.error(f"Error al parsear user_id para editar: {user_id_to_edit_str}")
+        # Log con nivel error si la conversión falla
+        logger.error(f"Error al parsear user_id para editar: query.data='{query.data}', user_id_to_edit_str='{user_id_to_edit_str}'")
         await query.edit_message_text("❌ Error interno. Intenta de nuevo.", reply_markup=get_back_to_menu_keyboard())
         context.user_data.clear()
         return ConversationHandler.END
