@@ -20,8 +20,6 @@ from telegram.error import BadRequest
 import database as db
 # Importar desde utils.py
 from utils import ADMIN_USER_ID, get_back_to_menu_keyboard, delete_message_later, DELETE_DELAY_SECONDS, generic_cancel_conversation # Actualizar importación
-# Importar get_main_menu_keyboard desde user_handlers si se necesita aquí
-from user_handlers import get_main_menu_keyboard as get_user_main_menu
 
 logger = logging.getLogger(__name__)
 
@@ -505,7 +503,6 @@ async def received_field_edit_selection(update: Update, context: ContextTypes.DE
         context.user_data.clear()
         return ConversationHandler.END
 
-    # Editar el mensaje para pedir el nuevo valor (sin teclado inline ahora)
     await query.edit_message_text(text=prompt_text, parse_mode=ParseMode.MARKDOWN)
     return next_state
 
@@ -535,7 +532,6 @@ async def received_new_name(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     else:
         confirmation_text = f"❌ No se pudo actualizar el nombre para el usuario ID `{user_id_to_edit}`."
 
-    # Usar _send_paginated_or_edit para el mensaje final (que se borrará)
     await _send_paginated_or_edit(update, context, confirmation_text, get_back_to_menu_keyboard())
     context.user_data.clear()
     return ConversationHandler.END
@@ -563,10 +559,8 @@ async def received_new_days(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         days_active = int(user_input)
         if days_active <= 0:
             await update.message.reply_text("El número de días debe ser positivo. Intenta de nuevo.")
-            # No borrar mensaje de error del bot, permitir reintentar
-            return GET_NEW_DAYS # Permanecer en el estado para reintentar
+            return GET_NEW_DAYS
 
-        # Calcular nueva fecha de expiración desde ahora
         current_ts = int(time.time())
         new_expiry_ts = current_ts + (days_active * 24 * 60 * 60)
         new_expiry_date = datetime.fromtimestamp(new_expiry_ts).strftime('%d/%m/%Y %H:%M')
@@ -579,7 +573,6 @@ async def received_new_days(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         else:
             confirmation_text = f"❌ No se pudo actualizar la expiración para el usuario ID `{user_id_to_edit}`."
 
-        # Usar _send_paginated_or_edit para el mensaje final (que se borrará)
         await _send_paginated_or_edit(update, context, confirmation_text, get_back_to_menu_keyboard())
         context.user_data.clear()
         return ConversationHandler.END
@@ -590,18 +583,17 @@ async def received_new_days(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             "Eso no parece un número de días válido. Debe ser un número entero positivo.\n"
             "Por favor, introduce el número de días."
         )
-        return GET_NEW_DAYS # Permanecer en el mismo estado
+        return GET_NEW_DAYS
     except Exception as e:
         logger.error(f"Error al procesar received_new_days para admin {admin_id}: {e}", exc_info=True)
         await update.message.reply_text("Ocurrió un error inesperado al actualizar el usuario.")
         context.user_data.clear()
         return ConversationHandler.END
 
-# Crear el ConversationHandler para edituser
 edituser_conv_handler = ConversationHandler(
     entry_points=[
-        CommandHandler("edituser", edit_user_start), # Permitir iniciar con comando
-        CallbackQueryHandler(edit_user_start, pattern=f"^{CALLBACK_ADMIN_EDIT_USER_PROMPT}$") # Entrada por botón
+        CommandHandler("edituser", edit_user_start),
+        CallbackQueryHandler(edit_user_start, pattern=f"^{CALLBACK_ADMIN_EDIT_USER_PROMPT}$")
         ],
     states={
         SELECT_USER_TO_EDIT: [CallbackQueryHandler(received_user_edit_selection, pattern="^edituser_")],
@@ -627,7 +619,6 @@ async def _send_paginated_or_edit(update: Update, context: ContextTypes.DEFAULT_
 
     try:
         if is_callback:
-            # Editar mensaje original (puede truncar si es muy largo)
             edited_message = await query.edit_message_text(
                 text=text[:max_length],
                 parse_mode=ParseMode.MARKDOWN,
@@ -636,19 +627,12 @@ async def _send_paginated_or_edit(update: Update, context: ContextTypes.DEFAULT_
             sent_messages_ids.append(edited_message.message_id)
             if len(text) > max_length:
                  logger.warning("Mensaje editado truncado por longitud.")
-                 # Opcional: enviar el resto en mensajes nuevos
-                 # for i in range(max_length, len(text), max_length):
-                 #    msg = await context.bot.send_message(chat_id, text[i:i+max_length], parse_mode=ParseMode.MARKDOWN)
-                 #    sent_messages_ids.append(msg.message_id)
         else:
-            # Borrar comando original si es posible
             if update.message:
                 try: await context.bot.delete_message(chat_id=chat_id, message_id=update.message.message_id)
-                except Exception: pass # Ignorar si no se puede borrar
+                except Exception: pass
 
-            # Enviar mensaje(s) paginados
             for i in range(0, len(text), max_length):
-                # Añadir teclado solo al último mensaje
                 current_keyboard = keyboard if (i + max_length >= len(text)) else None
                 msg = await context.bot.send_message(
                     chat_id=chat_id,
@@ -658,7 +642,6 @@ async def _send_paginated_or_edit(update: Update, context: ContextTypes.DEFAULT_
                 )
                 sent_messages_ids.append(msg.message_id)
 
-        # Programar borrado de todos los mensajes enviados/editados
         for msg_id in sent_messages_ids:
             job_queue.run_once(
                 delete_message_later,
@@ -670,7 +653,6 @@ async def _send_paginated_or_edit(update: Update, context: ContextTypes.DEFAULT_
 
     except BadRequest as e:
         logger.error(f"Error de Telegram al enviar/editar/borrar mensaje: {e}")
-        # Intentar enviar un mensaje de error simple si falla la edición/envío principal
         if not sent_messages_ids:
              try: await context.bot.send_message(chat_id, "⚠️ Ocurrió un error al mostrar la información.")
              except Exception as send_e: logger.error(f"No se pudo enviar mensaje de error: {send_e}")
@@ -691,7 +673,7 @@ async def list_users(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     logger.info(f"Admin {admin_id} solicitó listar usuarios (is_callback: {is_callback}).")
 
     try:
-        users = db.list_users_db() # Llamada a la función con logging añadido
+        users = db.list_users_db()
         if not users:
             user_list_text = "ℹ️ No hay usuarios registrados."
             logger.info("list_users: No users found in DB.")
@@ -700,23 +682,21 @@ async def list_users(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
             current_ts = int(time.time())
             user_list_text = "👥 *Usuarios Registrados:*\n"
             for user in users:
-                expiry_date = datetime.fromtimestamp(user['expiry_ts']).strftime('%d/%m/%Y %H:%M') # Añadir hora
+                expiry_date = datetime.fromtimestamp(user['expiry_ts']).strftime('%d/%m/%Y %H:%M')
                 status = "✅ Activo" if current_ts <= user['expiry_ts'] else "❌ Expirado"
-                name_escaped = db.escape_markdown(user.get('name', 'N/A')) # Usar .get() por seguridad
+                name_escaped = db.escape_markdown(user.get('name', 'N/A'))
                 user_list_text += (
                     f"\n👤 ID: `{user['user_id']}`\n"
                     f"   Nombre: {name_escaped}\n"
                     f"   Expira: {expiry_date} ({status})"
                 )
 
-        final_keyboard = get_back_to_menu_keyboard() # Siempre botón volver para listados
-        # Usar _send_paginated_or_edit que maneja envío/edición y borrado
+        final_keyboard = get_back_to_menu_keyboard()
         await _send_paginated_or_edit(update, context, user_list_text, final_keyboard)
         logger.info(f"list_users: Lista enviada/editada para admin {admin_id}.")
 
     except Exception as e:
         logger.error(f"Error al procesar list_users para admin {admin_id}: {e}", exc_info=True)
-        # Intentar enviar/editar mensaje de error
         await _send_paginated_or_edit(update, context, "⚠️ Ocurrió un error al listar usuarios.", get_back_to_menu_keyboard())
 
 # --- ELIMINAR list_all_accounts ---

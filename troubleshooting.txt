@@ -1,0 +1,37 @@
+El error `fatal: unable to access 'https://github.com/sysdevfiles/ScriptManagerAccounts.git/': Failed to connect to github.com port 443 after 130565 ms: Connection timed out` indica que el sistema no pudo establecer una conexión con los servidores de GitHub en el puerto 443 (HTTPS) dentro del tiempo límite establecido (aproximadamente 130 segundos).
+
+Las causas más probables son:
+
+1.  **Problemas de Conectividad de Red:**
+    *   El servidor donde se ejecuta el script no tiene acceso a Internet o la conexión es muy inestable.
+    *   Problemas con la resolución DNS (no puede encontrar la dirección IP de `github.com`).
+2.  **Firewall:**
+    *   Un firewall local en el servidor (como `ufw` o `iptables`) está bloqueando las conexiones salientes al puerto 443.
+    *   Un firewall en la red (router, firewall corporativo) está bloqueando el acceso a `github.com`.
+3.  **Problemas de Proxy:** Si el servidor necesita un proxy para acceder a Internet, Git debe estar configurado para usarlo.
+4.  **Bloqueo por ISP o Red:** En casos raros, el proveedor de Internet o la red podrían estar bloqueando el acceso a GitHub.
+5.  **Problemas Temporales de GitHub:** Aunque menos probable, podría haber una interrupción temporal del servicio de GitHub.
+
+**Pasos para diagnosticar:**
+
+*   **Verificar Conectividad Básica:** Intenta hacer ping a un sitio externo (`ping 8.8.8.8`) y a GitHub (`ping github.com`).
+*   **Verificar Conexión al Puerto 443:** Usa `curl -v https://github.com` o `telnet github.com 443` para ver si puedes establecer una conexión en ese puerto específico.
+*   **Revisar Reglas de Firewall:** Consulta las reglas del firewall local (ej. `sudo ufw status` o `sudo iptables -L`).
+*   **Configurar Proxy (si aplica):** Si usas un proxy, configura Git con `git config --global http.proxy http://proxy_user:proxy_pass@proxy_server:proxy_port` y `git config --global https.proxy https://proxy_user:proxy_pass@proxy_server:proxy_port`.
+*   **Consultar al Administrador de Red:** Si estás en una red corporativa o restringida, consulta si hay bloqueos activos.
+
+**Verificar Configuración de Nameserver (DNS) en Ubuntu:**
+
+Para ver qué servidores DNS (nameservers) está usando tu sistema Ubuntu, puedes usar los siguientes comandos:
+
+*   **Usando `resolvectl` (recomendado en sistemas modernos con systemd-resolved):**
+    ```bash
+    resolvectl status
+    ```
+    Busca la sección "DNS Servers" en la salida de tu interfaz de red activa.
+
+*   **Viendo el archivo `resolv.conf`:**
+    ```bash
+    cat /etc/resolv.conf
+    ```
+    Este archivo contiene las direcciones IP de los nameservers que el sistema consulta. Busca líneas que comiencen con `nameserver`. Ten en cuenta que en sistemas modernos, este archivo puede ser gestionado por `systemd-resolved` y podría apuntar a `127.0.0.53`. En ese caso, `resolvectl status` da información más completa.
