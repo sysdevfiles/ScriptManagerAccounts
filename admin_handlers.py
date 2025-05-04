@@ -63,60 +63,50 @@ def admin_required(func):
 @admin_required
 async def add_user_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Inicia la conversación para añadir/actualizar un usuario o procesa directamente si hay args."""
-    args = context.args
-    user_id = update.effective_user.id # Admin ID
+    query = update.callback_query
+    is_callback = bool(query)
+    admin_id = update.effective_user.id
+    logger.info(f"Admin {admin_id} iniciando add_user (is_callback: {is_callback}). Args: {context.args}")
 
-    # Caso 1: Argumentos proporcionados (comportamiento antiguo)
-    if len(args) == 3:
+    if context.args and len(context.args) == 3:
+        # Procesar argumentos directamente
+        user_id_str, name, days_str = context.args
+        # ... (validación de user_id_str, name, days_str) ...
+        if not user_id_str.isdigit():
+            await update.message.reply_text("❌ El ID de usuario debe ser numérico.", reply_markup=get_back_to_menu_keyboard())
+            return ConversationHandler.END
+        if not days_str.isdigit() or int(days_str) <= 0:
+            await update.message.reply_text("❌ Los días deben ser un número positivo.", reply_markup=get_back_to_menu_keyboard())
+            return ConversationHandler.END
+
+        user_id = int(user_id_str)
+        days = int(days_str)
+        expiry_ts = int(time.time()) + days * 86400  # 86400 segundos en un día
+        registration_ts = int(time.time())
+        payment_method = 'N/A' # Valor por defecto para el nuevo campo
+
         try:
-            target_user_id = int(args[0])
-            name = args[1]
-            days_active = int(args[2])
-
-            if days_active <= 0:
-                 await update.message.reply_text("Los días de activación deben ser un número positivo.")
-                 return ConversationHandler.END # Terminar si hay error en args
-
-            registration_ts = int(time.time())
-            expiry_ts = registration_ts + (days_active * 24 * 60 * 60)
+            # Pasar todos los argumentos requeridos, incluyendo el nuevo payment_method
+            db.add_user_db(user_id, name, payment_method, registration_ts, expiry_ts)
             expiry_date = datetime.fromtimestamp(expiry_ts).strftime('%d/%m/%Y')
-
-            db.add_user_db(target_user_id, name, "N/A", registration_ts, expiry_ts)
-
-            name_escaped = db.escape_markdown(name)
-            await update.message.reply_text(
-                f"Usuario {name_escaped} (ID: `{target_user_id}`) añadido/actualizado directamente.\n"
-                f"Acceso activo hasta: *{expiry_date}*.",
-                parse_mode=ParseMode.MARKDOWN
-            )
-            return ConversationHandler.END # Terminar después de procesar args
-
-        except ValueError:
-            await update.message.reply_text("Error en argumentos: El user_id y los días deben ser números.")
-            return ConversationHandler.END # Terminar si hay error en args
+            success_message = f"✅ Usuario `{user_id}` ({name}) añadido/actualizado. Acceso válido hasta: {expiry_date}."
+            await update.message.reply_text(success_message, parse_mode=ParseMode.MARKDOWN, reply_markup=get_back_to_menu_keyboard())
+            logger.info(f"Admin {admin_id} añadió/actualizó usuario {user_id} ({name}) directamente. Expira: {expiry_date}")
+            return ConversationHandler.END
         except Exception as e:
-            logger.error(f"Error al procesar /adduser con args para {args[0]}: {e}")
-            await update.message.reply_text("Ocurrió un error al añadir al usuario directamente.")
-            return ConversationHandler.END # Terminar si hay error en args
+            logger.error(f"Error al añadir/actualizar usuario {user_id} directamente: {e}", exc_info=True)
+            await update.message.reply_text("❌ Ocurrió un error al guardar en la base de datos.", reply_markup=get_back_to_menu_keyboard())
+            return ConversationHandler.END
 
-    # Caso 2: Sin argumentos o argumentos incorrectos -> Iniciar conversación
-    elif len(args) != 0:
-        # Si se dieron argumentos pero no 3, mostrar uso y terminar
-        await update.message.reply_text(
-            "Uso: `/adduser` (interactivo) o `/adduser <user_id> <nombre> <días>` (directo)",
-            parse_mode=ParseMode.MARKDOWN
-        )
-        return ConversationHandler.END
-
-    # Iniciar conversación interactiva
-    logger.info(f"Admin {user_id} iniciando conversación add_user.")
-    await update.message.reply_text(
-        "👤 Ok, vamos a *añadir o actualizar* un usuario.\n" # Texto ajustado
-        "1️⃣ Por favor, envíame el *ID de Telegram* del usuario.\n\n"
-        "Puedes cancelar en cualquier momento con /cancel.",
-        parse_mode=ParseMode.MARKDOWN
-    )
-    return GET_USER_ID
+    else: # Start conversation (no args or callback)
+        if is_callback:
+            # await query.answer() # Ya se hizo en callback_handler
+            pass # No es necesario responder de nuevo
+        message_text = "Por favor, dime el ID de Telegram del usuario que quieres añadir o actualizar:"
+        # Usar None como teclado al editar el mensaje inicial de la conversación
+        await _send_paginated_or_edit(update, context, message_text, None, schedule_delete=False)
+        logger.info(f"Admin {admin_id} iniciando conversación add_user. Pidiendo USER_ID.")
+        return GET_USER_ID
 
 async def received_user_id(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Recibe el ID del usuario, lo valida, pide el nombre y borra el mensaje del ID."""
@@ -209,9 +199,10 @@ async def received_days(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         registration_ts = int(time.time())
         expiry_ts = registration_ts + (days_active * 24 * 60 * 60)
         expiry_date = datetime.fromtimestamp(expiry_ts).strftime('%d/%m/%Y')
+        payment_method = 'N/A' # Valor por defecto para el nuevo campo
 
         # add_user_db actúa como REPLACE, por lo que actualiza si ya existe
-        db.add_user_db(target_user_id, name, "N/A", registration_ts, expiry_ts)
+        db.add_user_db(target_user_id, name, payment_method, registration_ts, expiry_ts)
 
         name_escaped = db.escape_markdown(name)
 
