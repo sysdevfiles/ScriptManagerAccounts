@@ -248,7 +248,11 @@ async def received_days(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 
 # Crear el ConversationHandler para adduser
 adduser_conv_handler = ConversationHandler(
-    entry_points=[CommandHandler("adduser", add_user_start)],
+    entry_points=[
+        CommandHandler("adduser", add_user_start),
+        # Añadir la entrada por botón para iniciar la conversación
+        CallbackQueryHandler(add_user_start, pattern=f"^{CALLBACK_ADMIN_ADD_USER_PROMPT}$")
+        ],
     states={
         GET_USER_ID: [MessageHandler(filters.TEXT & ~filters.COMMAND, received_user_id)],
         GET_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, received_name)],
@@ -274,7 +278,6 @@ async def delete_user_start(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     if not active_users:
         message_text = "ℹ️ No hay otros usuarios registrados para eliminar."
         keyboard = get_back_to_menu_keyboard()
-        # Usar la función helper definida para enviar/editar y programar borrado
         await _send_paginated_or_edit(update, context, message_text, keyboard)
         return ConversationHandler.END
 
@@ -285,11 +288,6 @@ async def delete_user_start(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
     users_keyboard = InlineKeyboardMarkup(buttons)
 
-    # Usar _send_paginated_or_edit para manejar envío/edición inicial
-    # Nota: _send_paginated_or_edit programa el borrado por defecto.
-    # Si NO quieres borrar este mensaje inicial, necesitarías modificar _send_paginated_or_edit
-    # o manejar el envío/edición aquí directamente sin programar borrado.
-    # Por ahora, asumimos que el borrado programado es aceptable o se ajustará _send_paginated_or_edit.
     await _send_paginated_or_edit(update, context, message_text, users_keyboard)
     return SELECT_USER_TO_DELETE
 
@@ -505,7 +503,6 @@ async def received_new_name(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     chat_id = update.effective_chat.id
     user_id_to_edit = context.user_data.get('edit_user_id')
 
-    # Borrar mensaje del usuario con el nuevo nombre
     try: await context.bot.delete_message(chat_id=chat_id, message_id=user_message_id)
     except Exception: pass
 
@@ -536,7 +533,6 @@ async def received_new_days(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     user_id_to_edit = context.user_data.get('edit_user_id')
     job_queue = context.job_queue
 
-    # Borrar mensaje del usuario con los días
     try: await context.bot.delete_message(chat_id=chat_id, message_id=user_message_id)
     except Exception: pass
 
