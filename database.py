@@ -181,10 +181,12 @@ def get_user_status_db(user_id: int) -> dict | None:
 def is_user_authorized(user_id: int) -> bool:
     """Verifica si un usuario está autorizado."""
     if user_id == ADMIN_USER_ID:
+        logger.debug(f"is_user_authorized: User {user_id} is ADMIN. Returning True.")
         return True
 
     try:
         conn = sqlite3.connect(DATABASE_FILE)
+        conn.row_factory = sqlite3.Row # Asegurar acceso por nombre de columna
         cursor = conn.cursor()
         cursor.execute("SELECT expiry_ts FROM users WHERE user_id = ?", (user_id,))
         user_row = cursor.fetchone()
@@ -192,24 +194,37 @@ def is_user_authorized(user_id: int) -> bool:
 
         if user_row:
             current_ts = int(time.time())
-            return current_ts <= user_row['expiry_ts']
-        return False
+            expiry_ts = user_row['expiry_ts']
+            is_valid = current_ts <= expiry_ts
+            logger.debug(f"is_user_authorized: User {user_id} found. current_ts={current_ts}, expiry_ts={expiry_ts}. Is valid: {is_valid}")
+            return is_valid
+        else:
+            logger.debug(f"is_user_authorized: User {user_id} not found in users table. Returning False.")
+            return False
     except sqlite3.Error as e:
         logger.error(f"Error de BD al verificar autorización para user_id {user_id}: {e}")
+        return False
+    except Exception as e: # Capturar otros posibles errores (ej. acceso a user_row['expiry_ts'])
+        logger.error(f"Error inesperado en is_user_authorized para user_id {user_id}: {e}", exc_info=True)
         return False
 
 def list_users_db() -> list:
     """Obtiene la lista de todos los usuarios registrados de la BD."""
+    users_list = []
     try:
         conn = sqlite3.connect(DATABASE_FILE)
+        conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
-        cursor.execute("SELECT user_id, name, payment_method, expiry_ts FROM users ORDER BY expiry_ts DESC")
-        users = cursor.fetchall()
+        cursor.execute("SELECT user_id, name, expiry_ts FROM users ORDER BY name")
+        rows = cursor.fetchall()
         conn.close()
-        return [dict(user) for user in users] # Devolver lista de diccionarios
+        users_list = [dict(row) for row in rows]
+        logger.info(f"list_users_db: Found {len(users_list)} users.")
+        logger.debug(f"list_users_db: Data retrieved: {users_list}") # Log detallado de datos
     except sqlite3.Error as e:
         logger.error(f"Error de BD al listar usuarios: {e}")
-        raise
+        # Devolver lista vacía en caso de error para no romper el flujo
+    return users_list
 
 def delete_user_db(user_id: int) -> bool:
     """Elimina un usuario autorizado de la BD."""
@@ -231,6 +246,49 @@ def delete_user_db(user_id: int) -> bool:
     except sqlite3.Error as e:
         logger.error(f"Error de BD al eliminar usuario {user_id}: {e}")
         # No relanzar la excepción, devolver False
+        return False
+
+def update_user_name_db(user_id: int, new_name: str) -> bool:
+    """Actualiza el nombre de un usuario autorizado."""
+    if user_id == ADMIN_USER_ID:
+        logger.warning(f"Intento de editar nombre del administrador (ID: {user_id}). Operación denegada.")
+        return False # No permitir editar al admin
+    try:
+        conn = sqlite3.connect(DATABASE_FILE)
+        cursor = conn.cursor()
+        cursor.execute("UPDATE users SET name = ? WHERE user_id = ?", (new_name, user_id))
+        updated_rows = cursor.rowcount
+        conn.commit()
+        conn.close()
+        if updated_rows > 0:
+            logger.info(f"Nombre del usuario {user_id} actualizado a '{new_name}'.")
+        else:
+            logger.warning(f"Intento de actualizar nombre para usuario {user_id} fallido (no encontrado).")
+        return updated_rows > 0
+    except sqlite3.Error as e:
+        logger.error(f"Error de BD al actualizar nombre para usuario {user_id}: {e}")
+        return False
+
+def update_user_expiry_db(user_id: int, new_expiry_ts: int) -> bool:
+    """Actualiza la fecha de expiración de un usuario autorizado."""
+    if user_id == ADMIN_USER_ID:
+        logger.warning(f"Intento de editar expiración del administrador (ID: {user_id}). Operación denegada.")
+        return False # No permitir editar al admin
+    try:
+        conn = sqlite3.connect(DATABASE_FILE)
+        cursor = conn.cursor()
+        cursor.execute("UPDATE users SET expiry_ts = ? WHERE user_id = ?", (new_expiry_ts, user_id))
+        updated_rows = cursor.rowcount
+        conn.commit()
+        conn.close()
+        if updated_rows > 0:
+            expiry_date = datetime.fromtimestamp(new_expiry_ts).strftime('%d/%m/%Y %H:%M')
+            logger.info(f"Expiración del usuario {user_id} actualizada a {expiry_date} ({new_expiry_ts}).")
+        else:
+            logger.warning(f"Intento de actualizar expiración para usuario {user_id} fallido (no encontrado).")
+        return updated_rows > 0
+    except sqlite3.Error as e:
+        logger.error(f"Error de BD al actualizar expiración para usuario {user_id}: {e}")
         return False
 
 # --- Funciones CRUD para Cuentas y Perfiles (Revisadas) ---

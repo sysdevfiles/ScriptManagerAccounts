@@ -28,11 +28,19 @@ logger = logging.getLogger(__name__)
 # --- Constantes de Tiempo de Borrado ---
 DELETE_DELAY_SECONDS = 20 # Segundos para borrar mensajes de confirmación
 
+# --- Constantes de Callback Data (Admin) ---
+CALLBACK_ADMIN_ADD_USER_PROMPT = 'admin_add_user_prompt'
+CALLBACK_ADMIN_LIST_USERS = 'admin_list_users'
+CALLBACK_ADMIN_EDIT_USER_PROMPT = 'admin_edit_user_prompt' # Para botón Editar Usuario (placeholder)
+CALLBACK_ADMIN_DELETE_USER_START = 'admin_delete_user_start' # Para iniciar conversación de borrado desde botón
+
 # --- Estados para Conversaciones ---
 # add_user
 GET_USER_ID, GET_NAME, GET_DAYS = range(3)
 # delete_user
 SELECT_USER_TO_DELETE, CONFIRM_USER_DELETE = range(3, 5) # Nuevos estados
+# edit_user (Nuevos estados)
+SELECT_USER_TO_EDIT, CHOOSE_FIELD_TO_EDIT, GET_NEW_NAME, GET_NEW_DAYS = range(5, 9)
 
 # --- Decorador Admin Required ---
 def admin_required(func):
@@ -264,15 +272,21 @@ adduser_conv_handler = ConversationHandler(
 
 @admin_required
 async def delete_user_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Inicia la conversación para eliminar un usuario autorizado."""
+    """Inicia la conversación para eliminar un usuario autorizado (vía comando o botón)."""
     admin_id = update.effective_user.id
-    logger.info(f"Admin {admin_id} iniciando conversación delete_user.")
+    is_callback = update.callback_query is not None
+    logger.info(f"Admin {admin_id} iniciando conversación delete_user (is_callback: {is_callback}).")
+    if is_callback:
+        await update.callback_query.answer() # Responder al callback si viene de botón
 
     users = db.list_users_db()
     active_users = [u for u in users if u['user_id'] != admin_id] # No permitir eliminar al propio admin
 
     if not active_users:
-        await update.message.reply_text("ℹ️ No hay otros usuarios registrados para eliminar.", reply_markup=get_back_to_menu_keyboard())
+        message_text = "ℹ️ No hay otros usuarios registrados para eliminar."
+        keyboard = get_back_to_menu_keyboard()
+        # Usar la función helper definida para enviar/editar y programar borrado
+        await _send_paginated_or_edit(update, context, message_text, keyboard)
         return ConversationHandler.END
 
     buttons = []
@@ -280,11 +294,14 @@ async def delete_user_start(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         label = f"ID: {user['user_id']} - {user['name']}"
         buttons.append([InlineKeyboardButton(label, callback_data=f"deluser_{user['user_id']}")])
 
-    message_text = "🗑️ Selecciona el usuario que deseas eliminar de la lista de autorizados 👇:\n\nPuedes cancelar con /cancel."
     users_keyboard = InlineKeyboardMarkup(buttons)
 
     # Usar _send_paginated_or_edit para manejar envío/edición inicial
-    await _send_paginated_or_edit(update, context, message_text, users_keyboard) # schedule_delete=False por defecto en esta función si es comando
+    # Nota: _send_paginated_or_edit programa el borrado por defecto.
+    # Si NO quieres borrar este mensaje inicial, necesitarías modificar _send_paginated_or_edit
+    # o manejar el envío/edición aquí directamente sin programar borrado.
+    # Por ahora, asumimos que el borrado programado es aceptable o se ajustará _send_paginated_or_edit.
+    await _send_paginated_or_edit(update, context, message_text, users_keyboard)
     return SELECT_USER_TO_DELETE
 
 async def received_user_delete_selection(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -375,15 +392,226 @@ async def confirm_user_delete(update: Update, context: ContextTypes.DEFAULT_TYPE
     return ConversationHandler.END
 
 deleteuser_conv_handler = ConversationHandler(
-    entry_points=[CommandHandler("deleteuser", delete_user_start)],
+    entry_points=[
+        CommandHandler("deleteuser", delete_user_start),
+        CallbackQueryHandler(delete_user_start, pattern=f"^{CALLBACK_ADMIN_DELETE_USER_START}$") # Añadir entrada por botón
+        ],
     states={
         SELECT_USER_TO_DELETE: [CallbackQueryHandler(received_user_delete_selection, pattern="^deluser_")],
         CONFIRM_USER_DELETE: [CallbackQueryHandler(confirm_user_delete, pattern="^deleteuser_confirm_")],
     },
-    fallbacks=[CommandHandler("cancel", lambda u, c: generic_cancel_conversation(u, c, "delete_user"))], # Usar cancelador genérico
-    allow_reentry=True # Permitir reentrar si se cancela y se vuelve a llamar
+    fallbacks=[CommandHandler("cancel", lambda u, c: generic_cancel_conversation(u, c, "delete_user"))],
+    allow_reentry=True
 )
 
+# --- Conversación: Editar Usuario (/edituser o botón) ---
+
+@admin_required
+async def edit_user_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Inicia la conversación para editar un usuario autorizado."""
+    admin_id = update.effective_user.id
+    is_callback = update.callback_query is not None
+    logger.info(f"Admin {admin_id} iniciando conversación edit_user (is_callback: {is_callback}).")
+    if is_callback:
+        await update.callback_query.answer()
+
+    users = db.list_users_db()
+    editable_users = [u for u in users if u['user_id'] != admin_id] # No permitir editar al propio admin
+
+    if not editable_users:
+        message_text = "ℹ️ No hay otros usuarios registrados para editar."
+        keyboard = get_back_to_menu_keyboard()
+        await _send_paginated_or_edit(update, context, message_text, keyboard)
+        return ConversationHandler.END
+
+    buttons = []
+    for user in editable_users:
+        label = f"ID: {user['user_id']} - {user['name']}"
+        buttons.append([InlineKeyboardButton(label, callback_data=f"edituser_{user['user_id']}")])
+
+    message_text = "✏️ Selecciona el usuario que deseas editar 👇:\n\nPuedes cancelar con /cancel."
+    users_keyboard = InlineKeyboardMarkup(buttons)
+
+    await _send_paginated_or_edit(update, context, message_text, users_keyboard, schedule_delete=False)
+    return SELECT_USER_TO_EDIT
+
+async def received_user_edit_selection(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Recibe la selección del usuario a editar, pide qué campo editar."""
+    query = update.callback_query
+    await query.answer()
+    user_id_to_edit_str = query.data.split("edituser_")[-1]
+    admin_id = query.from_user.id
+
+    try:
+        user_id_to_edit = int(user_id_to_edit_str)
+        user_info = db.get_user_status_db(user_id_to_edit)
+
+        if not user_info:
+             await query.edit_message_text("❌ Usuario no encontrado.", reply_markup=get_back_to_menu_keyboard())
+             return ConversationHandler.END
+
+        context.user_data['edit_user_id'] = user_id_to_edit
+        context.user_data['edit_user_name'] = user_info.get('name', 'N/A') # Guardar nombre actual
+        logger.info(f"Admin {admin_id} en edit_user: Seleccionado ID {user_id_to_edit} ({user_info.get('name', 'N/A')}) para editar.")
+
+        buttons = [
+            [InlineKeyboardButton("👤 Nombre", callback_data="editfield_name")],
+            [InlineKeyboardButton("⏳ Días de Acceso", callback_data="editfield_days")]
+        ]
+        keyboard = InlineKeyboardMarkup(buttons)
+        name_escaped = db.escape_markdown(user_info.get('name', 'N/A'))
+        await query.edit_message_text(
+            text=f"Editando a *{name_escaped}* (ID: `{user_id_to_edit}`).\n¿Qué deseas modificar?",
+            reply_markup=keyboard,
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return CHOOSE_FIELD_TO_EDIT
+    except ValueError:
+        logger.error(f"Error al parsear user_id para editar: {user_id_to_edit_str}")
+        await query.edit_message_text("❌ Error interno. Intenta de nuevo.", reply_markup=get_back_to_menu_keyboard())
+        context.user_data.clear()
+        return ConversationHandler.END
+    except Exception as e:
+        logger.error(f"Error en received_user_edit_selection: {e}", exc_info=True)
+        await query.edit_message_text("❌ Error inesperado. Intenta de nuevo.", reply_markup=get_back_to_menu_keyboard())
+        context.user_data.clear()
+        return ConversationHandler.END
+
+async def received_field_edit_selection(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Recibe el campo a editar, pide el nuevo valor."""
+    query = update.callback_query
+    await query.answer()
+    field_to_edit = query.data.split("editfield_")[-1]
+    context.user_data['edit_field'] = field_to_edit
+    user_id_to_edit = context.user_data.get('edit_user_id')
+    user_name = context.user_data.get('edit_user_name', 'Usuario')
+
+    if not user_id_to_edit:
+        logger.error("Falta edit_user_id en received_field_edit_selection.")
+        await query.edit_message_text("❌ Error interno. Reinicia la edición.", reply_markup=get_back_to_menu_keyboard())
+        context.user_data.clear()
+        return ConversationHandler.END
+
+    name_escaped = db.escape_markdown(user_name)
+    if field_to_edit == "name":
+        prompt_text = f"✏️ Editando nombre de *{name_escaped}* (ID: `{user_id_to_edit}`).\nIntroduce el *nuevo nombre*:"
+        next_state = GET_NEW_NAME
+    elif field_to_edit == "days":
+        prompt_text = f"✏️ Editando acceso de *{name_escaped}* (ID: `{user_id_to_edit}`).\nIntroduce el *nuevo número total de días* de acceso (desde hoy):"
+        next_state = GET_NEW_DAYS
+    else:
+        logger.error(f"Campo de edición no válido: {field_to_edit}")
+        await query.edit_message_text("❌ Error interno. Campo no válido.", reply_markup=get_back_to_menu_keyboard())
+        context.user_data.clear()
+        return ConversationHandler.END
+
+    # Editar el mensaje para pedir el nuevo valor (sin teclado inline ahora)
+    await query.edit_message_text(text=prompt_text, parse_mode=ParseMode.MARKDOWN)
+    return next_state
+
+async def received_new_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Recibe el nuevo nombre, actualiza la BD y finaliza."""
+    new_name = update.message.text
+    admin_id = update.effective_user.id
+    user_message_id = update.message.message_id
+    chat_id = update.effective_chat.id
+    user_id_to_edit = context.user_data.get('edit_user_id')
+
+    # Borrar mensaje del usuario con el nuevo nombre
+    try: await context.bot.delete_message(chat_id=chat_id, message_id=user_message_id)
+    except Exception: pass
+
+    if not user_id_to_edit:
+        logger.error(f"Admin {admin_id} en received_new_name: Falta edit_user_id.")
+        await update.message.reply_text("❌ Error interno. Reinicia la edición.", reply_markup=get_back_to_menu_keyboard())
+        context.user_data.clear()
+        return ConversationHandler.END
+
+    success = db.update_user_name_db(user_id_to_edit, new_name)
+    name_escaped = db.escape_markdown(new_name)
+    if success:
+        confirmation_text = f"✅ Nombre del usuario ID `{user_id_to_edit}` actualizado a *{name_escaped}*."
+        logger.info(f"Admin {admin_id} actualizó nombre de {user_id_to_edit} a '{new_name}'.")
+    else:
+        confirmation_text = f"❌ No se pudo actualizar el nombre para el usuario ID `{user_id_to_edit}`."
+
+    # Usar _send_paginated_or_edit para el mensaje final (que se borrará)
+    await _send_paginated_or_edit(update, context, confirmation_text, get_back_to_menu_keyboard())
+    context.user_data.clear()
+    return ConversationHandler.END
+
+async def received_new_days(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Recibe los nuevos días, calcula expiración, actualiza BD y finaliza."""
+    user_input = update.message.text
+    admin_id = update.effective_user.id
+    user_message_id = update.message.message_id
+    chat_id = update.effective_chat.id
+    user_id_to_edit = context.user_data.get('edit_user_id')
+    job_queue = context.job_queue
+
+    # Borrar mensaje del usuario con los días
+    try: await context.bot.delete_message(chat_id=chat_id, message_id=user_message_id)
+    except Exception: pass
+
+    if not user_id_to_edit:
+        logger.error(f"Admin {admin_id} en received_new_days: Falta edit_user_id.")
+        await update.message.reply_text("❌ Error interno. Reinicia la edición.", reply_markup=get_back_to_menu_keyboard())
+        context.user_data.clear()
+        return ConversationHandler.END
+
+    try:
+        days_active = int(user_input)
+        if days_active <= 0:
+            await update.message.reply_text("El número de días debe ser positivo. Intenta de nuevo.")
+            # No borrar mensaje de error del bot, permitir reintentar
+            return GET_NEW_DAYS # Permanecer en el estado para reintentar
+
+        # Calcular nueva fecha de expiración desde ahora
+        current_ts = int(time.time())
+        new_expiry_ts = current_ts + (days_active * 24 * 60 * 60)
+        new_expiry_date = datetime.fromtimestamp(new_expiry_ts).strftime('%d/%m/%Y %H:%M')
+
+        success = db.update_user_expiry_db(user_id_to_edit, new_expiry_ts)
+
+        if success:
+            confirmation_text = f"✅ Acceso del usuario ID `{user_id_to_edit}` actualizado.\nNueva expiración: *{new_expiry_date}* ({days_active} días desde ahora)."
+            logger.info(f"Admin {admin_id} actualizó expiración de {user_id_to_edit} a {new_expiry_date}.")
+        else:
+            confirmation_text = f"❌ No se pudo actualizar la expiración para el usuario ID `{user_id_to_edit}`."
+
+        # Usar _send_paginated_or_edit para el mensaje final (que se borrará)
+        await _send_paginated_or_edit(update, context, confirmation_text, get_back_to_menu_keyboard())
+        context.user_data.clear()
+        return ConversationHandler.END
+
+    except ValueError:
+        logger.warning(f"Admin {admin_id} en edit_user: Entrada inválida para días: {user_input}")
+        await update.message.reply_text(
+            "Eso no parece un número de días válido. Debe ser un número entero positivo.\n"
+            "Por favor, introduce el número de días."
+        )
+        return GET_NEW_DAYS # Permanecer en el mismo estado
+    except Exception as e:
+        logger.error(f"Error al procesar received_new_days para admin {admin_id}: {e}", exc_info=True)
+        await update.message.reply_text("Ocurrió un error inesperado al actualizar el usuario.")
+        context.user_data.clear()
+        return ConversationHandler.END
+
+# Crear el ConversationHandler para edituser
+edituser_conv_handler = ConversationHandler(
+    entry_points=[
+        CommandHandler("edituser", edit_user_start), # Permitir iniciar con comando
+        CallbackQueryHandler(edit_user_start, pattern=f"^{CALLBACK_ADMIN_EDIT_USER_PROMPT}$") # Entrada por botón
+        ],
+    states={
+        SELECT_USER_TO_EDIT: [CallbackQueryHandler(received_user_edit_selection, pattern="^edituser_")],
+        CHOOSE_FIELD_TO_EDIT: [CallbackQueryHandler(received_field_edit_selection, pattern="^editfield_")],
+        GET_NEW_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, received_new_name)],
+        GET_NEW_DAYS: [MessageHandler(filters.TEXT & ~filters.COMMAND, received_new_days)],
+    },
+    fallbacks=[CommandHandler("cancel", lambda u, c: generic_cancel_conversation(u, c, "edit_user"))],
+    allow_reentry=True
+)
 
 # --- Handlers Simples (Listados) ---
 
@@ -458,20 +686,23 @@ async def list_users(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     """(Admin) Lista todos los usuarios autorizados."""
     query = update.callback_query
     is_callback = bool(query)
+    admin_id = update.effective_user.id
     if is_callback: await query.answer()
+    logger.info(f"Admin {admin_id} solicitó listar usuarios (is_callback: {is_callback}).")
 
     try:
-        users = db.list_users_db()
+        users = db.list_users_db() # Llamada a la función con logging añadido
         if not users:
             user_list_text = "ℹ️ No hay usuarios registrados."
+            logger.info("list_users: No users found in DB.")
         else:
-            # ... (construcción de user_list_text - sin cambios) ...
+            logger.info(f"list_users: Formatting {len(users)} users.")
             current_ts = int(time.time())
             user_list_text = "👥 *Usuarios Registrados:*\n"
             for user in users:
-                expiry_date = datetime.fromtimestamp(user['expiry_ts']).strftime('%d/%m/%Y')
+                expiry_date = datetime.fromtimestamp(user['expiry_ts']).strftime('%d/%m/%Y %H:%M') # Añadir hora
                 status = "✅ Activo" if current_ts <= user['expiry_ts'] else "❌ Expirado"
-                name_escaped = db.escape_markdown(user['name'])
+                name_escaped = db.escape_markdown(user.get('name', 'N/A')) # Usar .get() por seguridad
                 user_list_text += (
                     f"\n👤 ID: `{user['user_id']}`\n"
                     f"   Nombre: {name_escaped}\n"
@@ -479,46 +710,14 @@ async def list_users(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
                 )
 
         final_keyboard = get_back_to_menu_keyboard() # Siempre botón volver para listados
+        # Usar _send_paginated_or_edit que maneja envío/edición y borrado
         await _send_paginated_or_edit(update, context, user_list_text, final_keyboard)
+        logger.info(f"list_users: Lista enviada/editada para admin {admin_id}.")
 
     except Exception as e:
-        logger.error(f"Error al procesar list_users: {e}", exc_info=True)
+        logger.error(f"Error al procesar list_users para admin {admin_id}: {e}", exc_info=True)
+        # Intentar enviar/editar mensaje de error
         await _send_paginated_or_edit(update, context, "⚠️ Ocurrió un error al listar usuarios.", get_back_to_menu_keyboard())
-
-@admin_required
-async def list_all_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """(Admin) Lista todos los perfiles de todas las cuentas en el sistema."""
-    logger.info(f"Admin {update.effective_user.id} solicitó listar todas las cuentas.")
-    try:
-        all_profiles = db.get_all_accounts_db() # Usar la nueva función de BD
-
-        if not all_profiles:
-            message = "ℹ️ No hay perfiles registrados en el sistema."
-            keyboard = get_back_to_menu_keyboard()
-        else:
-            accounts_text_list = ["🧾 *Todos los Perfiles Registrados:*"]
-            current_user_id = None
-            for profile in all_profiles:
-                if profile['user_id'] != current_user_id:
-                    accounts_text_list.append(f"\n--- Usuario: {profile.get('owner_name', 'N/A')} (`{profile['user_id']}`) ---")
-                    current_user_id = profile['user_id']
-
-                expiry_date = datetime.fromtimestamp(profile['expiry_ts']).strftime('%d/%m/%Y') if profile.get('expiry_ts') else 'N/A'
-                accounts_text_list.append(
-                    f"  - P.ID `{profile.get('profile_id')}`: {db.escape_markdown(profile.get('service', 'N/A'))} "
-                    f"(👤 {db.escape_markdown(profile.get('profile_name', 'N/A'))}) "
-                    f"| Email: `{db.escape_markdown(profile.get('email', 'N/A'))}` | Exp: {expiry_date}"
-                )
-            message = "\n".join(accounts_text_list)
-            # Usar teclado de volver al menú para listas largas
-            keyboard = get_back_to_menu_keyboard()
-
-        # Usar _send_paginated_or_edit para manejar mensajes largos y edición/envío
-        await _send_paginated_or_edit(update, context, message, keyboard)
-
-    except Exception as e:
-        logger.error(f"Error al procesar list_all_accounts: {e}", exc_info=True)
-        await _send_paginated_or_edit(update, context, "⚠️ Ocurrió un error al obtener la lista de cuentas.", get_back_to_menu_keyboard())
 
 # --- ELIMINAR list_all_accounts ---
 # @admin_required

@@ -23,6 +23,14 @@ import database as db
 # Importar desde utils.py (asumiendo que las funciones de borrado están ahí o se moverán)
 from utils import ADMIN_USER_ID, get_back_to_menu_keyboard, delete_message_later, DELETE_DELAY_SECONDS, generic_cancel_conversation # Importar cancelador genérico
 
+# Importar nuevas constantes de admin_handlers si es necesario (o definirlas aquí si se prefiere)
+from admin_handlers import (
+    CALLBACK_ADMIN_ADD_USER_PROMPT,
+    CALLBACK_ADMIN_LIST_USERS,
+    CALLBACK_ADMIN_EDIT_USER_PROMPT, # Nueva constante para editar
+    CALLBACK_ADMIN_DELETE_USER_START # Nueva constante para iniciar eliminación
+)
+
 logger = logging.getLogger(__name__)
 
 # --- Constantes y Estados para Conversaciones ---
@@ -52,30 +60,33 @@ def get_main_menu_keyboard(is_admin: bool, is_authorized: bool) -> InlineKeyboar
     """Genera el teclado del menú principal según el rol y autorización."""
     keyboard = []
     # Opciones comunes si está autorizado o es admin
-    if is_authorized or is_admin: # Corregido: 'or' en lugar de '()' innecesarios
+    if (is_authorized or is_admin):
         keyboard.extend([
             [InlineKeyboardButton("📊 Estado", callback_data='show_status')],
-            [InlineKeyboardButton("📋 Mis Cuentas", callback_data='list_accounts')],
         ])
         # Opciones solo para usuarios normales autorizados
         if is_authorized and not is_admin:
+             keyboard.append([InlineKeyboardButton("📋 Mis Cuentas", callback_data='list_accounts')]) # Mantener para usuarios normales
              keyboard.append([InlineKeyboardButton("➕ Añadir Mi Cuenta", callback_data=CALLBACK_ADD_MY_ACCOUNT)])
              keyboard.append([InlineKeyboardButton("✏️ Editar Mi Cuenta", callback_data=CALLBACK_EDIT_MY_ACCOUNT)])
              keyboard.append([InlineKeyboardButton("🗑️ Eliminar Mi Cuenta", callback_data=CALLBACK_DELETE_MY_ACCOUNT)])
-             keyboard.append([InlineKeyboardButton("💾 Backup Mis Cuentas", callback_data=CALLBACK_BACKUP_MY_ACCOUNTS)]) # <-- Nuevo botón
-             keyboard.append([InlineKeyboardButton("📥 Importar Backup", callback_data=CALLBACK_IMPORT_MY_ACCOUNTS)]) # <-- Nuevo botón
+             keyboard.append([InlineKeyboardButton("💾 Backup Mis Cuentas", callback_data=CALLBACK_BACKUP_MY_ACCOUNTS)])
+             keyboard.append([InlineKeyboardButton("📥 Importar Backup", callback_data=CALLBACK_IMPORT_MY_ACCOUNTS)])
 
     # Opciones solo para Admin
     if is_admin:
+        # Botones específicos para Admin
         keyboard.extend([
-            [InlineKeyboardButton("🔑 Admin: Listar Usuarios", callback_data='admin_list_users')],
-            [InlineKeyboardButton("👤 Admin: Añadir/Act. Usuario", callback_data='admin_add_user_prompt')],
-            [InlineKeyboardButton("🧾 Admin: Listar Todas Cuentas", callback_data='admin_list_all_accounts')],
+            [InlineKeyboardButton("🔑 Admin: Listar Usuarios", callback_data=CALLBACK_ADMIN_LIST_USERS)],
+            [InlineKeyboardButton("👤 Admin: Añadir/Act. Usuario", callback_data=CALLBACK_ADMIN_ADD_USER_PROMPT)],
+            [InlineKeyboardButton("✏️ Admin: Editar Usuario", callback_data=CALLBACK_ADMIN_EDIT_USER_PROMPT)], # Botón Editar (placeholder)
+            [InlineKeyboardButton("🗑️ Admin: Eliminar Usuario", callback_data=CALLBACK_ADMIN_DELETE_USER_START)], # Botón Eliminar
+            # El botón "Listar Todas Cuentas" se elimina
         ])
 
     # Si no hay botones (no autorizado y no admin), no añadir nada
     if not keyboard:
-         return None # O un teclado vacío si se prefiere InlineKeyboardMarkup([])
+         return None
 
     return InlineKeyboardMarkup(keyboard)
 
@@ -175,19 +186,26 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         help_text += "*/status* - Verifica tu estado de acceso.\n"
 
         if is_authorized or is_admin_user:
+            # Comandos para usuarios autorizados (incluido admin)
             help_text += "\n*Comandos Autorizados:*\n"
-            help_text += "`/list` - 📋 Muestra tus perfiles activos.\n"
-            help_text += "`/get` - 🔑 Obtiene los detalles (PIN) de tus perfiles (privado).\n"
+            help_text += "`/list` - 📋 Muestra tus perfiles propios activos.\n"
+            help_text += "`/get` - 🔑 Obtiene los detalles (PIN) de tus perfiles propios (privado).\n"
+
+            # Comandos solo para usuarios autorizados NO admin
             if is_authorized and not is_admin_user:
                  help_text += "`/addmyaccount` - ➕ Añade un perfil propio (válido 30 días).\n"
                  help_text += "`/editmyaccount` - ✏️ Edita el Email o PIN de un perfil propio.\n"
                  help_text += "`/deletemyaccount` - 🗑️ Elimina un perfil propio.\n"
+                 help_text += "`/backupmyaccounts` - 💾 Genera un backup de tus cuentas.\n"
+                 help_text += "`/importmyaccounts` - 📥 Importa cuentas desde un backup.\n"
 
         if is_admin_user:
             help_text += "\n*Comandos de Administrador:*\n"
-            help_text += "`/adduser <user_id> <nombre> <días>` - Autoriza/actualiza un usuario.\n"
-            help_text += "`/listusers` - Lista usuarios autorizados.\n"
-            help_text += "`/listallaccounts` - Lista todos los perfiles registrados (propios y de usuarios).\n"
+            help_text += "`/adduser` - 👤 Inicia el proceso para añadir/actualizar un usuario autorizado.\n"
+            help_text += "`/listusers` - 🔑 Lista todos los usuarios autorizados.\n"
+            help_text += "`/edituser` - ✏️ Inicia el proceso para editar el nombre o días de acceso de un usuario.\n" # Actualizado
+            help_text += "`/deleteuser` - 🗑️ Inicia el proceso para eliminar un usuario autorizado.\n"
+            # help_text += "`/listallaccounts` - 🧾 Lista todos los perfiles registrados (eliminado del menú).\n" # Comando eliminado del menú
 
         keyboard = get_main_menu_keyboard(is_admin_user, is_authorized)
         await update.message.reply_text(help_text, parse_mode=ParseMode.MARKDOWN, reply_markup=keyboard)

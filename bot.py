@@ -16,7 +16,7 @@ from user_handlers import (
     editmyaccount_conv_handler,
     importmyaccounts_conv_handler
 )
-from admin_handlers import adduser_conv_handler, deleteuser_conv_handler
+from admin_handlers import adduser_conv_handler, deleteuser_conv_handler, edituser_conv_handler # Añadir edituser_conv_handler
 
 # Cargar variables de entorno
 load_dotenv()
@@ -74,14 +74,14 @@ def main() -> None:
 
     admin_command_handlers = [
         CommandHandler("listusers", admin_handlers.list_users),
-        CommandHandler("listallaccounts", admin_handlers.list_all_accounts), # <-- Descomentado
-        # Nota: Los entry points de las conversaciones de admin también son CommandHandlers
-        # pero se incluyen en el ConversationHandler mismo.
+        # CommandHandler("listallaccounts", admin_handlers.list_all_accounts), # Eliminado o comentado
+        CommandHandler("edituser", admin_handlers.edit_user_start), # Añadir comando para editar
     ]
 
     admin_conversation_handlers = [
         adduser_conv_handler,
         deleteuser_conv_handler,
+        edituser_conv_handler, # Registrar el nuevo handler de conversación
     ]
 
     # --- Registrar Handlers ---
