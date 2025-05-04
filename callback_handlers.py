@@ -102,19 +102,32 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
 
         # --- Callback para volver al menú ---
         elif callback_data == 'back_to_main_menu':
-            # Re-generar y mostrar el menú principal
+            # Re-generar y mostrar el menú principal usando la función actualizada
             keyboard = user_handlers.get_main_menu_keyboard(is_admin_user, is_authorized_user)
-            await query.edit_message_text(
-                text="Menú Principal:",
-                reply_markup=keyboard
-            )
+            try:
+                await query.edit_message_text(
+                    text="Menú Principal:",
+                    reply_markup=keyboard
+                )
+            except BadRequest as e:
+                 # Si el mensaje original fue borrado, enviar uno nuevo
+                 if "message to edit not found" in str(e).lower():
+                     logger.warning(f"No se pudo editar mensaje para back_to_main_menu (probablemente borrado), enviando nuevo: {e}")
+                     await context.bot.send_message(
+                         chat_id=query.message.chat_id,
+                         text="Menú Principal:",
+                         reply_markup=keyboard
+                     )
+                 else:
+                     raise e # Re-lanzar otros errores
 
         else:
             logger.warning(f"Callback data '{callback_data}' no manejado explícitamente.")
             # Informar al usuario si el botón no hace nada esperado
             try:
+                # Usar el teclado de volver al menú aquí también
                 await query.edit_message_text(text="Acción no reconocida o ya procesada.", reply_markup=get_back_to_menu_keyboard())
-            except BadRequest: pass
+            except BadRequest: pass # Ignorar si el mensaje ya fue borrado
 
     except Exception as e:
         logger.error(f"Error procesando callback '{callback_data}' para user {user_id}: {e}", exc_info=True)
@@ -132,6 +145,4 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
                 )
             except Exception as send_error:
                 logger.error(f"Error enviando mensaje de error de callback a {user_id}: {send_error}")
-
-# ... (resto del archivo si existe) ...
 

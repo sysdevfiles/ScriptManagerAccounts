@@ -607,8 +607,12 @@ edituser_conv_handler = ConversationHandler(
 
 # --- Handlers Simples (Listados) ---
 
-async def _send_paginated_or_edit(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str, keyboard: InlineKeyboardMarkup):
-    """Envía o edita un mensaje, paginando si es necesario y programando borrado."""
+async def _send_paginated_or_edit(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str, keyboard: InlineKeyboardMarkup, schedule_delete: bool = True):
+    """
+    Envía o edita un mensaje, paginando si es necesario.
+    Programa el borrado de los mensajes enviados/editados si schedule_delete es True,
+    excepto si el teclado es el de 'Volver al Menú'.
+    """
     query = update.callback_query
     is_callback = bool(query)
     chat_id = update.effective_chat.id
@@ -616,23 +620,38 @@ async def _send_paginated_or_edit(update: Update, context: ContextTypes.DEFAULT_
     max_length = 4096 # Límite de Telegram
 
     sent_messages_ids = []
+    is_back_to_menu_keyboard = (keyboard == get_back_to_menu_keyboard())
 
     try:
         if is_callback:
-            edited_message = await query.edit_message_text(
-                text=text[:max_length],
-                parse_mode=ParseMode.MARKDOWN,
-                reply_markup=keyboard
-            )
-            sent_messages_ids.append(edited_message.message_id)
-            if len(text) > max_length:
-                 logger.warning("Mensaje editado truncado por longitud.")
-        else:
+            # Intentar editar mensaje original
+            try:
+                edited_message = await query.edit_message_text(
+                    text=text[:max_length],
+                    parse_mode=ParseMode.MARKDOWN,
+                    reply_markup=keyboard
+                )
+                sent_messages_ids.append(edited_message.message_id)
+                if len(text) > max_length:
+                     logger.warning("Mensaje editado truncado por longitud.")
+                     # Opcional: enviar el resto en mensajes nuevos si es necesario
+            except BadRequest as e:
+                 # Si el mensaje original fue borrado (ej. por timeout previo), enviar uno nuevo
+                 if "message to edit not found" in str(e).lower() or "message can't be edited" in str(e).lower():
+                     logger.warning(f"No se pudo editar mensaje (probablemente borrado), enviando nuevo: {e}")
+                     is_callback = False # Tratar como si no fuera callback para el envío
+                 else:
+                     raise e # Re-lanzar otros errores de BadRequest
+
+        if not is_callback: # Si no fue callback o la edición falló y necesitamos enviar nuevo
+            # Borrar comando original si es posible y no es callback
             if update.message:
                 try: await context.bot.delete_message(chat_id=chat_id, message_id=update.message.message_id)
-                except Exception: pass
+                except Exception: pass # Ignorar si no se puede borrar
 
+            # Enviar mensaje(s) paginados
             for i in range(0, len(text), max_length):
+                # Añadir teclado solo al último mensaje
                 current_keyboard = keyboard if (i + max_length >= len(text)) else None
                 msg = await context.bot.send_message(
                     chat_id=chat_id,
@@ -642,14 +661,19 @@ async def _send_paginated_or_edit(update: Update, context: ContextTypes.DEFAULT_
                 )
                 sent_messages_ids.append(msg.message_id)
 
-        for msg_id in sent_messages_ids:
-            job_queue.run_once(
-                delete_message_later,
-                when=timedelta(seconds=DELETE_DELAY_SECONDS),
-                data={'chat_id': chat_id, 'message_id': msg_id},
-                name=f'delete_{chat_id}_{msg_id}'
-            )
-            logger.info(f"Programado borrado del mensaje {msg_id} en {DELETE_DELAY_SECONDS} segundos.")
+        # Programar borrado solo si schedule_delete es True Y no es el teclado de volver al menú
+        if schedule_delete and not is_back_to_menu_keyboard:
+            for msg_id in sent_messages_ids:
+                job_queue.run_once(
+                    delete_message_later,
+                    when=timedelta(seconds=DELETE_DELAY_SECONDS),
+                    data={'chat_id': chat_id, 'message_id': msg_id},
+                    name=f'delete_{chat_id}_{msg_id}'
+                )
+                logger.info(f"Programado borrado del mensaje {msg_id} en {DELETE_DELAY_SECONDS} segundos.")
+        elif is_back_to_menu_keyboard:
+             logger.info(f"No se programó borrado para mensaje {sent_messages_ids[-1]} (contiene botón 'Volver al Menú').")
+
 
     except BadRequest as e:
         logger.error(f"Error de Telegram al enviar/editar/borrar mensaje: {e}")
@@ -698,6 +722,17 @@ async def list_users(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     except Exception as e:
         logger.error(f"Error al procesar list_users para admin {admin_id}: {e}", exc_info=True)
         await _send_paginated_or_edit(update, context, "⚠️ Ocurrió un error al listar usuarios.", get_back_to_menu_keyboard())
+
+# --- Funciones Auxiliares ---
+
+def get_admin_specific_buttons() -> list:
+    """Devuelve la lista de botones específicos para el menú de administrador."""
+    return [
+        [InlineKeyboardButton("🔑 Admin: Listar Usuarios", callback_data=CALLBACK_ADMIN_LIST_USERS)],
+        [InlineKeyboardButton("👤 Admin: Añadir/Act. Usuario", callback_data=CALLBACK_ADMIN_ADD_USER_PROMPT)],
+        [InlineKeyboardButton("✏️ Admin: Editar Usuario", callback_data=CALLBACK_ADMIN_EDIT_USER_PROMPT)],
+        [InlineKeyboardButton("🗑️ Admin: Eliminar Usuario", callback_data=CALLBACK_ADMIN_DELETE_USER_START)],
+    ]
 
 # --- ELIMINAR list_all_accounts ---
 # @admin_required

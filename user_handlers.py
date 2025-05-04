@@ -23,7 +23,9 @@ import database as db
 # Importar desde utils.py (asumiendo que las funciones de borrado están ahí o se moverán)
 from utils import ADMIN_USER_ID, get_back_to_menu_keyboard, delete_message_later, DELETE_DELAY_SECONDS, generic_cancel_conversation # Importar cancelador genérico
 
-# Importar nuevas constantes de admin_handlers si es necesario (o definirlas aquí si se prefiere)
+# Importar selectivamente de admin_handlers
+from admin_handlers import get_admin_specific_buttons # Importar la nueva función
+# Mantener solo las constantes de callback necesarias aquí si se usan directamente
 from admin_handlers import (
     CALLBACK_ADMIN_ADD_USER_PROMPT,
     CALLBACK_ADMIN_LIST_USERS,
@@ -75,14 +77,9 @@ def get_main_menu_keyboard(is_admin: bool, is_authorized: bool) -> InlineKeyboar
 
     # Opciones solo para Admin
     if is_admin:
-        # Botones específicos para Admin
-        keyboard.extend([
-            [InlineKeyboardButton("🔑 Admin: Listar Usuarios", callback_data=CALLBACK_ADMIN_LIST_USERS)],
-            [InlineKeyboardButton("👤 Admin: Añadir/Act. Usuario", callback_data=CALLBACK_ADMIN_ADD_USER_PROMPT)],
-            [InlineKeyboardButton("✏️ Admin: Editar Usuario", callback_data=CALLBACK_ADMIN_EDIT_USER_PROMPT)], # Botón Editar (placeholder)
-            [InlineKeyboardButton("🗑️ Admin: Eliminar Usuario", callback_data=CALLBACK_ADMIN_DELETE_USER_START)], # Botón Eliminar
-            # El botón "Listar Todas Cuentas" se elimina
-        ])
+        # Obtener botones específicos del admin desde admin_handlers
+        admin_buttons = get_admin_specific_buttons()
+        keyboard.extend(admin_buttons)
 
     # Si no hay botones (no autorizado y no admin), no añadir nada
     if not keyboard:
